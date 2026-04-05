@@ -82,7 +82,7 @@ On macOS, `Configure-IntuneMAA` will also offer to add the credentials to your P
 
 ## Payload Review
 
-When viewing a request, you can open the payload directly in **VS Code** or **Notepad** for a detailed review. For script-based policies (remediation scripts, platform scripts, detection rules), the actual script content is decoded and opened as a `.ps1` file. For other resource types, a formatted summary of settings and assignments is opened as a `.txt` file.
+When viewing a request, you can open the payload directly in **VS Code** or **Notepad** for a detailed review. Scripts are decoded and opened as `.ps1` files, and policies open as a formatted summary of settings and assignments.
 
 ## Supported Resource Types
 

@@ -280,9 +280,9 @@ function Show-Header {
 
     Clear-Host
     Write-Host ""
-    Write-Host "[ M A A   M A N A G E R ]  " -ForegroundColor DarkCyan -NoNewline
+    Write-Host "[ I N T U N E   M A A ]  " -ForegroundColor DarkCyan -NoNewline
     Write-Host "v1.0" -ForegroundColor White
-    Write-Host "      Multi Admin Approval Tool" -ForegroundColor DarkGray
+    Write-Host "    with PowerShell" -ForegroundColor DarkGray
     Write-Host ""
     if ($UserEmail) {
         Write-Host "  Logged in as: " -ForegroundColor DarkGray -NoNewline
@@ -654,10 +654,11 @@ function Open-ScriptForReview {
             $tempFile = Join-Path $env:TEMP "MAA_Review_$safeName.ps1"
             $decoded | Out-File -FilePath $tempFile -Encoding UTF8 -Force
 
-            Write-Host "  Opening in $($Editor): " -ForegroundColor Cyan -NoNewline
+            $editorDisplay = if ($Editor -eq "code") { "VS Code" } else { $Editor }
+            Write-Host "  Opening in $($editorDisplay): " -ForegroundColor Cyan -NoNewline
             Write-Host "$($scriptItem.Name)" -ForegroundColor White
             if ($Editor -eq "code") {
-                Start-Process cmd -ArgumentList "/c `"code `"$tempFile`"`"" -WindowStyle Hidden
+                & code $tempFile
             }
             else {
                 Start-Process $Editor -ArgumentList $tempFile
@@ -735,7 +736,8 @@ function Open-PayloadForReview {
         $tempFile = Join-Path $env:TEMP "MAA_Review_$safeName.txt"
         $lines | Out-File -FilePath $tempFile -Encoding UTF8 -Force
 
-        Write-Host "  Opening in $($Editor): " -ForegroundColor Cyan -NoNewline
+        $editorDisplay = if ($Editor -eq "code") { "VS Code" } else { $Editor }
+        Write-Host "  Opening in $($editorDisplay): " -ForegroundColor Cyan -NoNewline
         Write-Host "$($Request.payloadName)" -ForegroundColor White
 
         if ($Editor -eq "code") {

@@ -1,8 +1,6 @@
 # Intune-MAA
 
-PowerShell module for managing Multi Admin Approval (MAA) requests in Microsoft Intune.
-
-Provides a full-screen terminal UI for reviewing pending approval requests, viewing payload details, and approving or denying requests with justification.
+Manage Microsoft Intune Multi Admin Approval (MAA) requests with PowerShell. Provides a full-screen terminal UI for reviewing pending approval requests, viewing payload details, and approving or denying requests with justification. Just run `Start-MAAApproval` — works out of the box with no configuration, or bring your own app registration for full control.
 
 ## Installation
 
@@ -81,6 +79,10 @@ Start-MAAApproval -ClientId "your-app-id" -TenantId "your-tenant-id"
 ```
 
 On macOS, `Configure-IntuneMAA` will also offer to add the credentials to your PowerShell profile for persistence across sessions.
+
+## Payload Review
+
+When viewing a request, you can open the payload directly in **VS Code** or **Notepad** for a detailed review. For script-based policies (remediation scripts, platform scripts, detection rules), the actual script content is decoded and opened as a `.ps1` file. For other resource types, a formatted summary of settings and assignments is opened as a `.txt` file.
 
 ## Supported Resource Types
 

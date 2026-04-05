@@ -37,7 +37,7 @@ Start-MAAApproval
 
 ## Requirements
 
-- PowerShell 5.1+
+- PowerShell 7.0+
 - Microsoft.Graph.Authentication module (v2.0.0+)
 - One of: Az.Accounts module OR NuGet Microsoft.Identity.Client package (for MSAL browser auth)
 

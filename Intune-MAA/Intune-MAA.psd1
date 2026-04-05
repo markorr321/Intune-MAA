@@ -7,7 +7,7 @@
     Copyright         = '(c) 2026 Mark Orr. All rights reserved.'
     Description       = 'Intune Multi Admin Approval (MAA) module for reviewing, approving, and denying MAA requests via a terminal UI. Provides a full-screen terminal interface for reviewing pending approval requests, viewing payload details, and approving or denying requests with justification. Works with Microsoft Graph beta API and supports custom app registrations.'
 
-    PowerShellVersion = '5.1'
+    PowerShellVersion = '7.0'
 
     # Microsoft.Graph.Authentication is required at runtime but auto-installed by Connect-ToGraph
     # RequiredModules is omitted to avoid blocking install on systems without it pre-installed

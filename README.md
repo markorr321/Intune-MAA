@@ -25,6 +25,8 @@ Start-MAAApproval -ClientId "your-app-id" -TenantId "your-tenant-id"
 | Function | Description |
 |----------|-------------|
 | `Start-MAAApproval` | Launch the interactive approval manager |
+| `Configure-IntuneMAA` | Interactively configure and save app registration credentials |
+| `Clear-IntuneMAA` | Remove saved app registration configuration |
 | `Approve-MAARequest` | Approve a request by ID |
 | `Cancel-MAARequest` | Deny/reject a request by ID |
 | `Get-PendingMAARequests` | Get all pending MAA requests |
@@ -54,16 +56,23 @@ If using a custom app registration:
 
 ## Configuration
 
-Save your app registration for persistent use:
+Use the built-in configuration command to save your app registration credentials:
 
 ```powershell
-# Set environment variables (persists across sessions)
-[System.Environment]::SetEnvironmentVariable("MAA_CLIENT_ID", "your-app-id", "User")
-[System.Environment]::SetEnvironmentVariable("MAA_TENANT_ID", "your-tenant-id", "User")
+# Interactive setup — prompts for Client ID and Tenant ID, saves as user-level environment variables
+Configure-IntuneMAA
 
-# Or pass parameters directly
+# To remove saved configuration
+Clear-IntuneMAA
+```
+
+Alternatively, pass parameters directly each time:
+
+```powershell
 Start-MAAApproval -ClientId "your-app-id" -TenantId "your-tenant-id"
 ```
+
+On macOS, `Configure-IntuneMAA` will also offer to add the credentials to your PowerShell profile for persistence across sessions.
 
 ## Supported Resource Types
 

@@ -1,6 +1,6 @@
 # Intune-MAA
 
-[![PowerShell Gallery](https://img.shields.io/powershellgallery/v/Intune-MAA?label=PowerShell%20Gallery&color=blue)](https://www.powershellgallery.com/packages/Intune-MAA)
+[![PowerShell Gallery](https://img.shields.io/powershellgallery/v/Intune-MAA?label=PowerShell%20Gallery&color=blue)](https://www.powershellgallery.com/packages/Intune-MAA) [![PowerShell 7+](https://img.shields.io/badge/PowerShell-7.0%2B-blue?logo=powershell&logoColor=white)](https://github.com/PowerShell/PowerShell)
 
 Manage Microsoft Intune Multi Admin Approval (MAA) requests with PowerShell. Provides a full-screen terminal UI for reviewing pending approval requests, viewing payload details, and approving or denying requests with justification. Just run `Start-MAAApproval` — works out of the box with no configuration, or bring your own app registration for full control.
 

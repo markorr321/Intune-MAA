@@ -12,12 +12,16 @@ Install-Module -Name Intune-MAA
 
 ## Quick Start
 
-```powershell
-# Launch the approval manager TUI
-Start-MAAApproval
+Configure your app registration (one-time setup):
 
-# Configure your app registration (one-time setup)
+```powershell
 Configure-IntuneMAA
+```
+
+Launch the approval manager TUI:
+
+```powershell
+Start-MAAApproval
 ```
 
 ## Functions
@@ -58,15 +62,19 @@ If using a custom app registration:
 
 Use the built-in configuration command to save your app registration credentials:
 
-```powershell
-# Interactive setup — prompts for Client ID and Tenant ID, saves as user-level environment variables
-Configure-IntuneMAA
+Save your app registration credentials:
 
-# To remove saved configuration
+```powershell
+Configure-IntuneMAA
+```
+
+Remove saved configuration:
+
+```powershell
 Clear-IntuneMAA
 ```
 
-Alternatively, pass parameters directly each time:
+Or pass parameters directly each time:
 
 ```powershell
 Start-MAAApproval -ClientId "your-app-id" -TenantId "your-tenant-id"

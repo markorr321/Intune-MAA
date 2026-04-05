@@ -16,8 +16,8 @@ Install-Module -Name Intune-MAA
 # Launch the approval manager TUI
 Start-MAAApproval
 
-# With custom app registration
-Start-MAAApproval -ClientId "your-app-id" -TenantId "your-tenant-id"
+# Configure your app registration (one-time setup)
+Configure-IntuneMAA
 ```
 
 ## Functions

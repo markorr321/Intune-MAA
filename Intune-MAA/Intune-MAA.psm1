@@ -440,7 +440,8 @@ function Show-Header {
     Clear-Host
     Write-Host ""
     Write-Host "[ I N T U N E   M A A ]  " -ForegroundColor DarkCyan -NoNewline
-    Write-Host "v1.0" -ForegroundColor White
+    $moduleVersion = (Get-Module -Name Intune-MAA).Version
+    Write-Host "v$moduleVersion" -ForegroundColor White
     Write-Host "    with PowerShell" -ForegroundColor DarkGray
     Write-Host ""
     if ($UserEmail) {

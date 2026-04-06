@@ -1,6 +1,6 @@
 @{
     RootModule        = 'Intune-MAA.psm1'
-    ModuleVersion     = '1.0.0'
+    ModuleVersion     = '1.0.1'
     GUID              = 'a3f7c8d1-4e2b-4a9f-b6c3-8d5e1f2a7b90'
     Author            = 'Mark Orr'
     CompanyName       = 'orr365'
@@ -31,13 +31,10 @@
             LicenseUri   = 'https://github.com/markorr321/Intune-MAA/blob/master/LICENSE'
             ProjectUri   = 'https://github.com/markorr321/Intune-MAA'
             ReleaseNotes = @'
-## 1.0.0
-- Initial release
-- Terminal UI for reviewing and approving MAA requests
-- Support for custom app registrations via ClientId/TenantId
-- Payload detail view for all Intune resource types
-- Script content viewer (VS Code / Notepad)
-- Bulk approve all pending requests
+## 1.0.1
+- Added help menu (press H from main TUI)
+- Added automatic update check on module launch
+- Fixed project and license URLs in module manifest
 '@
         }
     }

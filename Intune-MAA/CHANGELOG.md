@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.1 - 2026-04-06
+
+### Added
+- Help menu accessible via `[H]` from the main TUI
+- Automatic update check on module launch
+
+### Fixed
+- Project and license URLs in module manifest
+
 ## 1.0.0 - 2026-04-05
 
 ### Added

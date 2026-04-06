@@ -28,8 +28,8 @@
     PrivateData = @{
         PSData = @{
             Tags         = @('Intune', 'MAA', 'MultiAdminApproval', 'MicrosoftGraph', 'Approval', 'MEM', 'Endpoint')
-            LicenseUri   = 'https://github.com/markorr321/Multi-Admin-Approval/blob/master/LICENSE'
-            ProjectUri   = 'https://github.com/markorr321/Multi-Admin-Approval'
+            LicenseUri   = 'https://github.com/markorr321/Intune-MAA/blob/master/LICENSE'
+            ProjectUri   = 'https://github.com/markorr321/Intune-MAA'
             ReleaseNotes = @'
 ## 1.0.0
 - Initial release

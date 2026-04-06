@@ -456,6 +456,45 @@ function Wait-ForKeyPress {
     $null = Read-Host "  Press Enter to continue"
 }
 
+function Show-HelpMenu {
+    [Console]::CursorVisible = $false
+    Clear-Host
+    Write-Host ""
+    Write-Host "[ I N T U N E   M A A ]" -ForegroundColor DarkCyan
+    Write-Host ""
+    Write-Host "  Help" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  MAIN MENU" -ForegroundColor Yellow
+    Write-Host "    1-9       Select a pending request"
+    Write-Host "    A         Approve all pending requests"
+    Write-Host "    R         Refresh the request list"
+    Write-Host "    H         Show this help menu"
+    Write-Host "    B         Go back"
+    Write-Host "    E         Exit (disconnects from Graph)"
+    Write-Host ""
+    Write-Host "  REQUEST REVIEW" -ForegroundColor Yellow
+    Write-Host "    A         Approve the request"
+    Write-Host "    D         Deny the request"
+    Write-Host "    S         Open payload in VS Code"
+    Write-Host "    N         Open payload in Notepad"
+    Write-Host "    B         Back to request list"
+    Write-Host "    E         Exit"
+    Write-Host ""
+    Write-Host "  CONFIGURATION" -ForegroundColor Yellow
+    Write-Host "    Configure-IntuneMAA    Save app registration credentials"
+    Write-Host "    Clear-IntuneMAA        Remove saved configuration"
+    Write-Host ""
+    Write-Host "  NOTES" -ForegroundColor Yellow
+    Write-Host "    - You cannot approve your own requests"
+    Write-Host "    - Justification is required for approvals"
+    Write-Host "    - Disable update checks: `$env:INTUNEMAA_DISABLE_UPDATE_CHECK = 'true'"
+    Write-Host ""
+    Write-Host "  https://www.powershellgallery.com/packages/Intune-MAA" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  Press any key to return..." -ForegroundColor DarkCyan
+    $null = [Console]::ReadKey($true)
+}
+
 function Show-InlineActions {
     param([array]$Actions)
 
@@ -2229,6 +2268,7 @@ function Start-ApprovalManager {
             $actions += @{ Key = "A"; Text = "Approve All" }
         }
         $actions += @{ Key = "R"; Text = "Refresh" }
+        $actions += @{ Key = "H"; Text = "Help" }
         Show-InlineActions -Actions $actions
         Show-ControlBar
 
@@ -2245,6 +2285,7 @@ function Start-ApprovalManager {
                 exit 0
             }
             "R" { continue }
+            "H" { Show-HelpMenu; continue }
             "A" {
                 if ($pendingRequests.Count -eq 0) {
                     Write-Host ""

@@ -336,7 +336,7 @@ public class MAABrowserAuth
 <html>
 <head>
     <meta charset='UTF-8'>
-    <title>Authentication Successful - MAA Manager</title>
+    <title>Authentication Successful - Intune-MAA</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: linear-gradient(135deg, #0e7490 0%, #155e75 100%); }
         .container { text-align: center; color: white; }
@@ -348,7 +348,7 @@ public class MAABrowserAuth
 </head>
 <body>
     <div class='container'>
-        <div class='brand'>[ M A A &nbsp; M A N A G E R ]</div>
+        <div class='brand'>[ I N T U N E &nbsp; M A A ]</div>
         <div class='checkmark'>&#10003;</div>
         <h1>Authentication Successful</h1>
         <p>You can close this window and return to PowerShell.</p>
@@ -359,7 +359,7 @@ public class MAABrowserAuth
 <html>
 <head>
     <meta charset='UTF-8'>
-    <title>Authentication Failed - MAA Manager</title>
+    <title>Authentication Failed - Intune-MAA</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); }
         .container { text-align: center; color: white; }
@@ -371,7 +371,7 @@ public class MAABrowserAuth
 </head>
 <body>
     <div class='container'>
-        <div class='brand'>[ M A A &nbsp; M A N A G E R ]</div>
+        <div class='brand'>[ I N T U N E &nbsp; M A A ]</div>
         <div class='icon'>&#10005;</div>
         <h1>Authentication Failed</h1>
         <p>Please close this window and try again.</p>

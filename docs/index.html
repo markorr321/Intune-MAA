@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intune MAA - Multi Admin Approval Manager for PowerShell</title>
+    <meta name="description" content="PowerShell module for managing Microsoft Intune Multi Admin Approval (MAA) requests. Review, approve, and deny requests from a full-screen terminal UI.">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-card: rgba(255, 255, 255, 0.05);
+            --bg-card-hover: rgba(255, 255, 255, 0.08);
+            --text-primary: #e6edf3;
+            --text-secondary: rgba(230, 237, 243, 0.7);
+            --text-muted: rgba(230, 237, 243, 0.4);
+            --accent-start: #667eea;
+            --accent-end: #764ba2;
+            --border: rgba(255, 255, 255, 0.08);
+            --code-bg: rgba(255, 255, 255, 0.06);
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        a { color: var(--accent-start); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        /* Hero */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse at 50% 0%, rgba(102, 126, 234, 0.15) 0%, transparent 60%),
+                        radial-gradient(ellipse at 80% 50%, rgba(118, 75, 162, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        .hero-brand {
+            font-size: clamp(1.2rem, 3vw, 1.8rem);
+            letter-spacing: 6px;
+            font-weight: 300;
+            opacity: 0.9;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-tagline {
+            font-size: clamp(1rem, 2.5vw, 1.4rem);
+            color: var(--text-secondary);
+            max-width: 700px;
+            margin-bottom: 0.5rem;
+            font-weight: 300;
+        }
+
+        .hero-sub {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            margin-bottom: 2.5rem;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 0.75rem 2rem;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .btn:hover { transform: translateY(-2px); text-decoration: none; }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
+            color: white;
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+        }
+        .btn-primary:hover { box-shadow: 0 6px 30px rgba(102, 126, 234, 0.45); }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            backdrop-filter: blur(10px);
+        }
+        .btn-secondary:hover { background: var(--bg-card-hover); }
+
+        .version-badge {
+            display: inline-block;
+            margin-top: 1.5rem;
+            padding: 0.3rem 1rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+        }
+
+        /* Sections */
+        section { padding: 3.5rem 2rem; max-width: 1100px; margin: 0 auto; }
+
+        .section-title {
+            font-size: clamp(1.5rem, 3vw, 2rem);
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+
+        .section-subtitle {
+            color: var(--text-secondary);
+            text-align: center;
+            margin-bottom: 2rem;
+            font-size: 1.05rem;
+        }
+
+        /* Features */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.8rem;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .feature-card:hover {
+            background: var(--bg-card-hover);
+            border-color: rgba(102, 126, 234, 0.2);
+        }
+
+        .feature-icon { font-size: 1.6rem; margin-bottom: 0.8rem; }
+
+        .feature-card h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-card p {
+            color: var(--text-secondary);
+            font-size: 0.92rem;
+            line-height: 1.5;
+        }
+
+        /* Demo */
+        .demo-section { background: var(--bg-secondary); border-radius: 16px; padding: 3rem 2rem; }
+
+        .demo-wrapper {
+            max-width: 800px;
+            margin: 0 auto;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .demo-wrapper img {
+            width: 100%;
+            display: block;
+        }
+
+        /* Quick Start */
+        .quickstart-section { background: var(--bg-secondary); border-radius: 16px; padding: 3rem 2rem; scroll-margin-top: 1rem; }
+
+        .code-block {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.2rem 1.5rem;
+            font-family: 'Cascadia Code', 'Fira Code', 'SF Mono', Consolas, monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            position: relative;
+            margin-bottom: 1rem;
+        }
+
+        .code-block .comment { color: #6a9955; }
+        .code-block .command { color: #dcdcaa; }
+        .code-block .string { color: #ce9178; }
+
+        .code-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .code-steps {
+            max-width: 650px;
+            margin: 0 auto;
+        }
+
+        .code-step {
+            margin-bottom: 1.5rem;
+        }
+
+        /* Shortcuts */
+        .shortcuts-table {
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            border-collapse: collapse;
+        }
+
+        .shortcuts-table th {
+            text-align: left;
+            padding: 0.8rem 1rem;
+            border-bottom: 2px solid var(--border);
+            color: var(--text-secondary);
+            font-weight: 500;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .shortcuts-table td {
+            padding: 0.7rem 1rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.95rem;
+        }
+
+        .shortcuts-table tr:last-child td { border-bottom: none; }
+
+        .key {
+            display: inline-block;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 0.15rem 0.5rem;
+            font-family: 'Cascadia Code', 'Fira Code', monospace;
+            font-size: 0.8rem;
+        }
+
+        /* Permissions */
+        .permissions-grid {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .permission-group h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.8rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .permission-group ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .permission-group li {
+            font-family: 'Cascadia Code', 'Fira Code', monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            padding: 0.35rem 0;
+        }
+
+        .permission-group li::before {
+            content: '>';
+            color: var(--accent-start);
+            margin-right: 0.5rem;
+        }
+
+        /* Supported Types */
+        .types-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .type-group h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.8rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .type-group ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .type-group li {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            padding: 0.35rem 0;
+        }
+
+        .type-group li::before {
+            content: '>';
+            color: var(--accent-start);
+            margin-right: 0.5rem;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 3rem 2rem;
+            border-top: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 2rem;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+
+        .footer-links a { color: var(--text-secondary); }
+        .footer-links a:hover { color: var(--accent-start); }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            section { padding: 3rem 1.2rem; }
+            .features-grid { grid-template-columns: 1fr; }
+            .hero { min-height: 80vh; }
+            .hero-buttons { flex-direction: column; align-items: center; }
+            .btn { width: 100%; max-width: 280px; justify-content: center; }
+            .types-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Hero -->
+    <div class="hero">
+        <div class="hero-brand">[ I N T U N E &nbsp; M A A ]</div>
+        <p class="hero-tagline">
+            Manage Intune Multi Admin Approval requests from your terminal.
+        </p>
+        <p class="hero-sub">
+            Review, approve, and deny MAA requests — one PowerShell command.
+        </p>
+        <div class="hero-buttons">
+            <a href="#quickstart" class="btn btn-primary">Install Now</a>
+            <a href="https://github.com/markorr321/Intune-MAA" class="btn btn-secondary">
+                <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                GitHub
+            </a>
+        </div>
+        <span class="version-badge">v1.0.1 &middot; PowerShell 7.0+</span>
+    </div>
+
+    <!-- Features -->
+    <section>
+        <h2 class="section-title">Features</h2>
+        <p class="section-subtitle">Everything you need to manage Intune MAA requests.</p>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">&#x1F6E1;</div>
+                <h3>Full-Screen Terminal UI</h3>
+                <p>Interactive TUI for browsing pending approval requests, viewing details, and taking action — all from your terminal.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#x2705;</div>
+                <h3>Approve &amp; Deny</h3>
+                <p>Approve or deny individual requests with justification, or bulk approve all pending requests in a single flow.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#x1F4CB;</div>
+                <h3>Payload Review</h3>
+                <p>View detailed payload summaries including settings, assignments, and script content. Open payloads directly in VS Code or Notepad.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#x1F4E6;</div>
+                <h3>Zero Config</h3>
+                <p>Works out of the box with no app registration. Auto-installs required modules on first run — just install and go.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#x1F511;</div>
+                <h3>Custom App Registration</h3>
+                <p>Optionally bring your own app registration with Configure-IntuneMAA for full control over authentication.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#x1F504;</div>
+                <h3>Auto-Updates</h3>
+                <p>Automatically checks PowerShell Gallery for new versions on launch and prompts to update with the correct install method.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#x1F310;</div>
+                <h3>Cross-Platform</h3>
+                <p>Works on Windows and macOS with PowerShell 7. Browser-based authentication with full Conditional Access support.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#x1F4C1;</div>
+                <h3>All Resource Types</h3>
+                <p>Supports apps, configuration profiles, compliance policies, scripts, Autopilot, update profiles, enrollment configs, and more.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#x26A1;</div>
+                <h3>Fast &amp; Lightweight</h3>
+                <p>Single PowerShell module with no heavy dependencies. Quick version checks via Gallery redirect — no slow API calls.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Demo -->
+    <section>
+        <div class="demo-section">
+            <h2 class="section-title">See It in Action</h2>
+            <p class="section-subtitle">Review and approve MAA requests from start to finish.</p>
+            <div class="demo-wrapper">
+                <img src="Intune-MAA.gif" alt="Intune-MAA Demo">
+            </div>
+        </div>
+    </section>
+
+    <!-- Quick Start -->
+    <section>
+        <div id="quickstart" class="quickstart-section">
+            <h2 class="section-title">Quick Start</h2>
+            <p class="section-subtitle">Up and running in two commands.</p>
+
+            <div class="code-steps">
+                <div class="code-step">
+                    <div class="code-label">Install</div>
+                    <div class="code-block">
+                        <span class="command">Install-Module</span> <span class="string">-Name Intune-MAA</span>
+                    </div>
+                </div>
+
+                <div class="code-step">
+                    <div class="code-label">Run</div>
+                    <div class="code-block">
+                        <span class="command">Start-MAAApproval</span>
+                    </div>
+                </div>
+
+                <div class="code-step">
+                    <div class="code-label">Optional: Custom App Registration</div>
+                    <div class="code-block">
+                        <span class="comment"># Configure once, use anytime</span><br>
+                        <span class="command">Configure-IntuneMAA</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Keyboard Shortcuts -->
+    <section>
+        <h2 class="section-title">Keyboard Shortcuts</h2>
+        <p class="section-subtitle">Navigate the TUI with ease.</p>
+
+        <table class="shortcuts-table">
+            <thead>
+                <tr><th>Shortcut</th><th>Action</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><span class="key">1</span>-<span class="key">9</span></td><td>Select a request</td></tr>
+                <tr><td><span class="key">A</span></td><td>Approve / Approve all</td></tr>
+                <tr><td><span class="key">D</span></td><td>Deny request</td></tr>
+                <tr><td><span class="key">S</span></td><td>Open payload in VS Code</td></tr>
+                <tr><td><span class="key">N</span></td><td>Open payload in Notepad</td></tr>
+                <tr><td><span class="key">R</span></td><td>Refresh request list</td></tr>
+                <tr><td><span class="key">H</span></td><td>Help</td></tr>
+                <tr><td><span class="key">B</span></td><td>Go back</td></tr>
+                <tr><td><span class="key">E</span></td><td>Exit</td></tr>
+            </tbody>
+        </table>
+    </section>
+
+    <!-- Supported Resource Types -->
+    <section>
+        <h2 class="section-title">Supported Resource Types</h2>
+        <p class="section-subtitle">Full coverage of Intune resource types.</p>
+
+        <div class="types-grid">
+            <div class="type-group">
+                <h3>Apps &amp; Policies</h3>
+                <ul>
+                    <li>Win32, MSI, Store, Web apps</li>
+                    <li>Configuration profiles</li>
+                    <li>Settings catalog policies</li>
+                    <li>Compliance policies</li>
+                    <li>Group policies</li>
+                    <li>Approval policies</li>
+                </ul>
+            </div>
+            <div class="type-group">
+                <h3>Scripts &amp; Updates</h3>
+                <ul>
+                    <li>Remediation scripts</li>
+                    <li>Platform scripts</li>
+                    <li>Feature update profiles</li>
+                    <li>Quality update profiles</li>
+                    <li>Driver update profiles</li>
+                </ul>
+            </div>
+            <div class="type-group">
+                <h3>Devices &amp; Enrollment</h3>
+                <ul>
+                    <li>Autopilot profiles</li>
+                    <li>Enrollment configurations</li>
+                    <li>Device categories</li>
+                    <li>Role definitions</li>
+                    <li>Device actions (Wipe, Retire, Delete)</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Permissions -->
+    <section>
+        <h2 class="section-title">API Permissions</h2>
+        <p class="section-subtitle">Required delegated permissions when using a custom app registration.</p>
+
+        <div class="permissions-grid">
+            <div class="permission-group">
+                <h3>Delegated (Graph Beta)</h3>
+                <ul>
+                    <li>DeviceManagementConfiguration.ReadWrite.All</li>
+                    <li>DeviceManagementRBAC.ReadWrite.All</li>
+                    <li>DeviceManagementManagedDevices.ReadWrite.All</li>
+                    <li>DeviceManagementApps.ReadWrite.All</li>
+                    <li>DeviceManagementScripts.ReadWrite.All</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-links">
+            <a href="https://github.com/markorr321/Intune-MAA">GitHub</a>
+            <a href="https://www.powershellgallery.com/packages/Intune-MAA">PowerShell Gallery</a>
+            <a href="https://github.com/markorr321/Intune-MAA/blob/main/LICENSE">License</a>
+        </div>
+        <p>by Mark Orr</p>
+    </footer>
+
+</body>
+</html>

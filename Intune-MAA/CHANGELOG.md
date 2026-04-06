@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2 - 2026-04-06
+
+### Changed
+- Auth page branding updated from "MAA Manager" to "Intune-MAA"
+- Teal colorway applied to auth pages
+
 ## 1.0.1 - 2026-04-06
 
 ### Added

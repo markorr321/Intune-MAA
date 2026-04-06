@@ -30,6 +30,165 @@ $script:MSALHelperCompiled = $false
 
 #endregion Module State
 
+#region Update Check
+
+function Show-UpdateNotification {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [version]$CurrentVersion,
+
+        [Parameter(Mandatory)]
+        [version]$LatestVersion
+    )
+
+    Write-Host ""
+    Write-Host "[!] Intune-MAA update available: $CurrentVersion -> $LatestVersion" -ForegroundColor Red
+    Write-Host ""
+
+    $response = Read-Host "Update now? (Y/N) [Press Enter to skip]"
+
+    if ($response -eq 'Y' -or $response -eq 'y') {
+        Write-Host ""
+        Write-Host "Updating Intune-MAA..." -ForegroundColor Cyan
+
+        try {
+            $installedViaPSResource = $null
+            $installedViaPowerShellGet = $null
+
+            if (Get-Command Get-InstalledPSResource -ErrorAction SilentlyContinue) {
+                $installedViaPSResource = Get-InstalledPSResource -Name Intune-MAA -ErrorAction SilentlyContinue
+            }
+
+            if (Get-Command Get-InstalledModule -ErrorAction SilentlyContinue) {
+                $installedViaPowerShellGet = Get-InstalledModule -Name Intune-MAA -ErrorAction SilentlyContinue
+            }
+
+            if ($installedViaPSResource) {
+                $installPath = $installedViaPSResource.InstalledLocation
+                $scope = if ($installPath -match 'Program Files|/usr/local') { 'AllUsers' } else { 'CurrentUser' }
+                Update-PSResource -Name Intune-MAA -Scope $scope -Confirm:$false
+            }
+            elseif ($installedViaPowerShellGet) {
+                Update-Module -Name Intune-MAA -Force
+            }
+            elseif (Get-Command Update-Module -ErrorAction SilentlyContinue) {
+                Update-Module -Name Intune-MAA -Force
+            }
+            else {
+                Write-Host "Update commands not found. Please run manually:" -ForegroundColor Yellow
+                Write-Host "  Install-Module -Name Intune-MAA -Force" -ForegroundColor Yellow
+                Write-Host ""
+                Write-Host "Press Enter to continue"
+                $null = [Console]::ReadLine()
+                return
+            }
+
+            Write-Host ""
+            Write-Host "Update complete!" -ForegroundColor Green
+            Write-Host ""
+
+            if ($IsWindows) {
+                Write-Host "Please restart PowerShell and run Start-MAAApproval again." -ForegroundColor Green
+                Write-Host ""
+                Write-Host "Press Enter to Exit"
+                $null = [Console]::ReadLine()
+                exit
+            }
+            else {
+                Write-Host "Please close this window and reopen PowerShell, then run Start-MAAApproval again." -ForegroundColor Yellow
+                Write-Host ""
+                return
+            }
+        }
+        catch {
+            Write-Host ""
+            Write-Host "Update failed: $_" -ForegroundColor Red
+            Write-Host "Please update manually with:" -ForegroundColor Yellow
+            Write-Host "  Update-Module -Name Intune-MAA      (if installed via Install-Module)" -ForegroundColor Yellow
+            Write-Host "  Update-PSResource -Name Intune-MAA  (if installed via Install-PSResource)" -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "Press Enter to continue anyway"
+            $null = [Console]::ReadLine()
+        }
+    }
+    elseif ($response -eq 'N' -or $response -eq 'n') {
+        Write-Host "Skipping update." -ForegroundColor Yellow
+        Write-Host ""
+    }
+    else {
+        Write-Host ""
+    }
+}
+
+function Test-IntuneMAAUpdate {
+    [CmdletBinding()]
+    param()
+
+    try {
+        if ($env:INTUNEMAA_DISABLE_UPDATE_CHECK -eq 'true') {
+            return
+        }
+
+        $currentModule = Get-Module -Name Intune-MAA |
+            Sort-Object Version -Descending |
+            Select-Object -First 1
+
+        if (-not $currentModule) {
+            $currentModule = Get-Module -Name Intune-MAA -ListAvailable |
+                Sort-Object Version -Descending |
+                Select-Object -First 1
+        }
+
+        if (-not $currentModule) {
+            return
+        }
+
+        $currentVersion = $currentModule.Version
+
+        try {
+            $url = "https://www.powershellgallery.com/packages/Intune-MAA"
+            $latestVersion = $null
+
+            try {
+                $null = Invoke-WebRequest -Uri $url -UseBasicParsing -MaximumRedirection 0 -TimeoutSec 5 -ErrorAction Stop
+            } catch {
+                if ($_.Exception.Response -and $_.Exception.Response.Headers) {
+                    try {
+                        $location = $_.Exception.Response.Headers.GetValues('Location') | Select-Object -First 1
+                        if ($location) {
+                            $versionString = Split-Path -Path $location -Leaf
+                            $latestVersion = [version]$versionString
+                        } else {
+                            return
+                        }
+                    } catch {
+                        return
+                    }
+                } else {
+                    return
+                }
+            }
+
+            if (-not $latestVersion) {
+                return
+            }
+
+            if ($currentVersion -lt $latestVersion) {
+                Show-UpdateNotification -CurrentVersion $currentVersion -LatestVersion $latestVersion
+            }
+
+        } catch {
+            return
+        }
+
+    } catch {
+        return
+    }
+}
+
+#endregion Update Check
+
 #region MSAL Browser Authentication
 
 function Initialize-MSALAssemblies {
@@ -1993,6 +2152,8 @@ function Start-MAAApproval {
 
         [switch]$ShowRaw
     )
+
+    Test-IntuneMAAUpdate
 
     $script:DebugMode = $ShowRaw
 

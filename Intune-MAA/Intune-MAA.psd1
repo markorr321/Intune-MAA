@@ -1,6 +1,6 @@
 @{
     RootModule        = 'Intune-MAA.psm1'
-    ModuleVersion     = '1.0.2'
+    ModuleVersion     = '1.0.3'
     GUID              = 'a3f7c8d1-4e2b-4a9f-b6c3-8d5e1f2a7b90'
     Author            = 'Mark Orr'
     CompanyName       = 'orr365'
@@ -31,7 +31,8 @@
             LicenseUri   = 'https://github.com/markorr321/Intune-MAA/blob/master/LICENSE'
             ProjectUri   = 'https://github.com/markorr321/Intune-MAA'
             ReleaseNotes = @'
-## 1.0.2
+## 1.0.3
+- TUI header now shows version dynamically from module manifest
 - Updated auth page branding to Intune-MAA
 - Matched teal colorway across auth pages
 '@

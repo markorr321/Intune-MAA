@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.3 - 2026-04-06
+
+### Changed
+- TUI header version is now dynamic from module manifest
+
 ## 1.0.2 - 2026-04-06
 
 ### Changed

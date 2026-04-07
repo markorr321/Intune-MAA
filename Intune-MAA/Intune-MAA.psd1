@@ -1,6 +1,6 @@
 @{
     RootModule        = 'Intune-MAA.psm1'
-    ModuleVersion     = '1.0.3'
+    ModuleVersion     = '1.0.4'
     GUID              = 'a3f7c8d1-4e2b-4a9f-b6c3-8d5e1f2a7b90'
     Author            = 'Mark Orr'
     CompanyName       = 'orr365'
@@ -31,10 +31,11 @@
             LicenseUri   = 'https://github.com/markorr321/Intune-MAA/blob/master/LICENSE'
             ProjectUri   = 'https://github.com/markorr321/Intune-MAA'
             ReleaseNotes = @'
-## 1.0.3
-- TUI header now shows version dynamically from module manifest
-- Updated auth page branding to Intune-MAA
-- Matched teal colorway across auth pages
+## 1.0.4
+- [NEW] / [REMOVED] labels for assignment changes (green/red highlighting)
+- Scope tag change detection with display name resolution
+- Group name resolution via Group.Read.All permission
+- Description truncation for clean terminal display
 '@
         }
     }

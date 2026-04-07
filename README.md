@@ -50,6 +50,7 @@ Start-MAAApproval
 - DeviceManagementManagedDevices.ReadWrite.All
 - DeviceManagementApps.ReadWrite.All
 - DeviceManagementScripts.ReadWrite.All
+- Group.Read.All
 
 ### Custom App Registration
 

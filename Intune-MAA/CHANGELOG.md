@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.4 - 2026-04-07
+
+### Added
+- [NEW] / [REMOVED] labels for assignment changes (green/red highlighting)
+- Scope tag change detection with display name resolution
+- Group name resolution via Group.Read.All permission
+
+### Fixed
+- Description truncation for clean terminal display
+
 ## 1.0.3 - 2026-04-06
 
 ### Changed

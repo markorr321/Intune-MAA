@@ -895,7 +895,7 @@ function Open-PayloadForReview {
         $payloadSummary = Get-PayloadSummary -Request $Request -MaxSettings 999
         $assignments = $Request.addedAssignments
         if (-not $assignments) { $assignments = Get-RelatedAssignments -Request $Request }
-        $assignmentsSummary = Get-AssignmentsSummary -Assignments $assignments
+        $assignmentsSummary = Get-AssignmentsSummary -Assignments $assignments -ExistingAssignments $Request.existingAssignments
 
         $lines = @()
         $divider = [string]::new([char]0x2500, 50)
@@ -974,6 +974,75 @@ function Resolve-GroupName {
     }
 
     return $GroupId
+}
+
+function Resolve-ScopeTagName {
+    param([string]$TagId)
+
+    if ([string]::IsNullOrWhiteSpace($TagId)) { return $TagId }
+    if ($TagId -eq "0") { return "Default" }
+
+    try {
+        $tag = Invoke-MgGraphRequest -Uri "https://graph.microsoft.com/beta/deviceManagement/roleScopeTags/$TagId`?`$select=displayName" -Method GET -ErrorAction SilentlyContinue
+        if ($tag.displayName) {
+            return $tag.displayName
+        }
+    }
+    catch { }
+
+    return "Tag $TagId"
+}
+
+function Get-ScopeTagChangeSummary {
+    param([object]$Request)
+
+    $patchPayload = $Request.patchPayload
+    if (-not $patchPayload) { return @() }
+
+    try {
+        $parsed = if ($patchPayload -is [string]) { $patchPayload | ConvertFrom-Json } else { $patchPayload }
+    }
+    catch { return @() }
+
+    if (-not $parsed.roleScopeTagIds) { return @() }
+
+    $newTagIds = @($parsed.roleScopeTagIds)
+
+    # Get existing scope tags from the payload
+    $existingTagIds = @()
+    $payloadRaw = $Request.payload
+    if ($payloadRaw) {
+        try {
+            $payloadParsed = if ($payloadRaw -is [string]) { $payloadRaw | ConvertFrom-Json } else { $payloadRaw }
+            if ($payloadParsed.roleScopeTagIds) {
+                $existingTagIds = @($payloadParsed.roleScopeTagIds)
+            }
+        }
+        catch { }
+    }
+
+    $summary = @()
+
+    # Find added tags
+    $addedTags = @($newTagIds | Where-Object { $_ -notin $existingTagIds })
+    # Find removed tags
+    $removedTags = @($existingTagIds | Where-Object { $_ -notin $newTagIds })
+
+    if ($addedTags.Count -gt 0 -or $removedTags.Count -gt 0) {
+        $summary += [PSCustomObject]@{ Label = "Scope Tag Changes"; Value = ""; IsNew = $false }
+
+        foreach ($tagId in $addedTags) {
+            $tagName = Resolve-ScopeTagName -TagId $tagId
+            $summary += [PSCustomObject]@{ Label = ""; Value = "    [NEW] $tagName"; IsNew = $true }
+        }
+
+        foreach ($tagId in $removedTags) {
+            $tagName = Resolve-ScopeTagName -TagId $tagId
+            $summary += [PSCustomObject]@{ Label = ""; Value = "    [REMOVED] $tagName"; IsNew = $false; IsRemoved = $true }
+        }
+    }
+
+    return $summary
 }
 
 function Get-ApprovalPolicySummary {
@@ -1418,7 +1487,10 @@ function Get-RelatedAssignments {
 }
 
 function Get-AssignmentsSummary {
-    param([object]$Assignments)
+    param(
+        [object]$Assignments,
+        [object]$ExistingAssignments
+    )
 
     if (-not $Assignments) { return @() }
 
@@ -1431,8 +1503,39 @@ function Get-AssignmentsSummary {
 
     if (-not $parsed -or $parsed.Count -eq 0) { return @() }
 
+    # Parse existing assignments to determine which are new
+    $existingKeys = @{}
+    if ($ExistingAssignments) {
+        try {
+            $existingParsed = if ($ExistingAssignments -is [string]) { $ExistingAssignments | ConvertFrom-Json } else { $ExistingAssignments }
+            foreach ($existing in $existingParsed) {
+                $eTarget = $existing.target
+                if ($eTarget) {
+                    $eGroupId = $eTarget.groupId
+                    $eType = $eTarget.'@odata.type'
+                    $eIntent = $existing.intent
+                    $key = "$eType|$eGroupId|$eIntent"
+                    $existingKeys[$key] = $true
+                }
+            }
+        }
+        catch { }
+    }
+
     $summary = @()
-    $summary += [PSCustomObject]@{ Label = "Assignments ($($parsed.Count))"; Value = "" }
+    $assignmentItems = @()
+
+    # Build keys for the new (full) assignment list
+    $newKeys = @{}
+    foreach ($assignment in $parsed) {
+        $target = $assignment.target
+        if (-not $target) { continue }
+        $targetType = $target.'@odata.type'
+        $groupId = $target.groupId
+        $intent = $assignment.intent
+        $key = "$targetType|$groupId|$intent"
+        $newKeys[$key] = $true
+    }
 
     foreach ($assignment in $parsed) {
         $target = $assignment.target
@@ -1458,8 +1561,58 @@ function Get-AssignmentsSummary {
             $targetDisplay = "$targetDisplay ($intent)"
         }
 
-        $summary += [PSCustomObject]@{ Label = ""; Value = "    $targetDisplay" }
+        # Determine if this assignment is new
+        $key = "$targetType|$groupId|$intent"
+        $isNew = -not $existingKeys.ContainsKey($key)
+
+        if ($isNew) {
+            $targetDisplay = "[NEW] $targetDisplay"
+        }
+
+        $assignmentItems += [PSCustomObject]@{ Label = ""; Value = "    $targetDisplay"; IsNew = $isNew; IsRemoved = $false }
     }
+
+    # Find removed assignments (in existing but not in new)
+    if ($ExistingAssignments) {
+        try {
+            $existingParsedForRemoval = if ($ExistingAssignments -is [string]) { $ExistingAssignments | ConvertFrom-Json } else { $ExistingAssignments }
+            foreach ($existing in $existingParsedForRemoval) {
+                $eTarget = $existing.target
+                if (-not $eTarget) { continue }
+
+                $eType = $eTarget.'@odata.type'
+                $eGroupId = $eTarget.groupId
+                $eIntent = $existing.intent
+                $key = "$eType|$eGroupId|$eIntent"
+
+                if (-not $newKeys.ContainsKey($key)) {
+                    $targetDisplay = switch -Wildcard ($eType) {
+                        "*allLicensedUsersAssignmentTarget" { "All Users" }
+                        "*allDevicesAssignmentTarget" { "All Devices" }
+                        "*exclusionGroupAssignmentTarget" { "Exclude Group" }
+                        "*groupAssignmentTarget" { "Group" }
+                        default { "Target" }
+                    }
+
+                    if ($eGroupId) {
+                        $groupName = Resolve-GroupName -GroupId $eGroupId
+                        $targetDisplay = "$targetDisplay`: $groupName"
+                    }
+
+                    if ($eIntent) {
+                        $targetDisplay = "$targetDisplay ($eIntent)"
+                    }
+
+                    $targetDisplay = "[REMOVED] $targetDisplay"
+                    $assignmentItems += [PSCustomObject]@{ Label = ""; Value = "    $targetDisplay"; IsNew = $false; IsRemoved = $true }
+                }
+            }
+        }
+        catch { }
+    }
+
+    $summary += [PSCustomObject]@{ Label = "Assignments ($($parsed.Count))"; Value = ""; IsNew = $false }
+    $summary += $assignmentItems
 
     return $summary
 }
@@ -1467,10 +1620,11 @@ function Get-AssignmentsSummary {
 function Show-PayloadDetails {
     param(
         [array]$Summary,
-        [array]$AssignmentsSummary
+        [array]$AssignmentsSummary,
+        [array]$ScopeTagSummary
     )
 
-    if ((-not $Summary -or $Summary.Count -eq 0) -and (-not $AssignmentsSummary -or $AssignmentsSummary.Count -eq 0)) {
+    if ((-not $Summary -or $Summary.Count -eq 0) -and (-not $AssignmentsSummary -or $AssignmentsSummary.Count -eq 0) -and (-not $ScopeTagSummary -or $ScopeTagSummary.Count -eq 0)) {
         return
     }
 
@@ -1481,8 +1635,14 @@ function Show-PayloadDetails {
         foreach ($item in $Summary) {
             if ($item.Label -and $item.Value) {
                 $padding = ' ' * [Math]::Max(1, 18 - $item.Label.Length)
-                Write-Host "  $($item.Label):$padding" -ForegroundColor DarkGray -NoNewline
-                Write-Host "$($item.Value)" -ForegroundColor White
+                $prefix = "  $($item.Label):$padding"
+                $maxValueWidth = [Math]::Max(20, [Console]::WindowWidth - $prefix.Length - 1)
+                $displayValue = $item.Value -replace "`r`n|`r|`n", ' '
+                if ($displayValue.Length -gt $maxValueWidth) {
+                    $displayValue = $displayValue.Substring(0, $maxValueWidth - 3) + "..."
+                }
+                Write-Host $prefix -ForegroundColor DarkGray -NoNewline
+                Write-Host $displayValue -ForegroundColor White
             }
             elseif ($item.Label -and -not $item.Value) {
                 Write-Host "  $($item.Label):" -ForegroundColor DarkGray
@@ -1498,6 +1658,30 @@ function Show-PayloadDetails {
         foreach ($item in $AssignmentsSummary) {
             if ($item.Label -and -not $item.Value) {
                 Write-Host "  $($item.Label):" -ForegroundColor DarkGray
+            }
+            elseif ($item.IsNew) {
+                Write-Host "  $($item.Value)" -ForegroundColor Green
+            }
+            elseif ($item.IsRemoved) {
+                Write-Host "  $($item.Value)" -ForegroundColor Red
+            }
+            else {
+                Write-Host "  $($item.Value)" -ForegroundColor Gray
+            }
+        }
+    }
+
+    if ($ScopeTagSummary -and $ScopeTagSummary.Count -gt 0) {
+        Write-Host ""
+        foreach ($item in $ScopeTagSummary) {
+            if ($item.Label -and -not $item.Value) {
+                Write-Host "  $($item.Label):" -ForegroundColor DarkGray
+            }
+            elseif ($item.IsNew) {
+                Write-Host "  $($item.Value)" -ForegroundColor Green
+            }
+            elseif ($item.IsRemoved) {
+                Write-Host "  $($item.Value)" -ForegroundColor Red
             }
             else {
                 Write-Host "  $($item.Value)" -ForegroundColor Gray
@@ -1541,7 +1725,8 @@ function Connect-ToGraph {
         "DeviceManagementRBAC.ReadWrite.All",
         "DeviceManagementManagedDevices.ReadWrite.All",
         "DeviceManagementApps.ReadWrite.All",
-        "DeviceManagementScripts.ReadWrite.All"
+        "DeviceManagementScripts.ReadWrite.All",
+        "Group.Read.All"
     )
 
     if ($script:CustomClientId) {
@@ -1974,8 +2159,9 @@ function Show-PendingActions {
     if (-not $assignments) {
         $assignments = Get-RelatedAssignments -Request $Request
     }
-    $assignmentsSummary = Get-AssignmentsSummary -Assignments $assignments
-    Show-PayloadDetails -Summary $payloadSummary -AssignmentsSummary $assignmentsSummary
+    $assignmentsSummary = Get-AssignmentsSummary -Assignments $assignments -ExistingAssignments $Request.existingAssignments
+    $scopeTagSummary = Get-ScopeTagChangeSummary -Request $Request
+    Show-PayloadDetails -Summary $payloadSummary -AssignmentsSummary $assignmentsSummary -ScopeTagSummary $scopeTagSummary
 
     $actions = @()
     if ($Request.payload) {

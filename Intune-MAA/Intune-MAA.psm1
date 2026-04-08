@@ -895,7 +895,11 @@ function Open-PayloadForReview {
         $payloadSummary = Get-PayloadSummary -Request $Request -MaxSettings 999
         $assignments = $Request.addedAssignments
         if (-not $assignments) { $assignments = Get-RelatedAssignments -Request $Request }
-        $assignmentsSummary = Get-AssignmentsSummary -Assignments $assignments -ExistingAssignments $Request.existingAssignments
+        $existingAssignments = $Request.existingAssignments
+        if (-not $existingAssignments -and $assignments) {
+            $existingAssignments = Get-RelatedAssignments -Request $Request
+        }
+        $assignmentsSummary = Get-AssignmentsSummary -Assignments $assignments -ExistingAssignments $existingAssignments
 
         $lines = @()
         $divider = [string]::new([char]0x2500, 50)
@@ -1010,16 +1014,21 @@ function Get-ScopeTagChangeSummary {
 
     # Get existing scope tags from the payload
     $existingTagIds = @()
+    $hasExistingTags = $false
     $payloadRaw = $Request.payload
     if ($payloadRaw) {
         try {
             $payloadParsed = if ($payloadRaw -is [string]) { $payloadRaw | ConvertFrom-Json } else { $payloadRaw }
-            if ($payloadParsed.roleScopeTagIds) {
+            if ($null -ne $payloadParsed.roleScopeTagIds) {
                 $existingTagIds = @($payloadParsed.roleScopeTagIds)
+                $hasExistingTags = $true
             }
         }
         catch { }
     }
+
+    # If we have no existing tags to compare against, we cannot determine what changed
+    if (-not $hasExistingTags) { return @() }
 
     $summary = @()
 
@@ -1414,39 +1423,79 @@ function Get-PayloadSummary {
         return @([PSCustomObject]@{ Label = "Details"; Value = "Unable to parse payload" })
     }
 
-    switch -Wildcard ($shortType) {
+    $typeSummary = switch -Wildcard ($shortType) {
         { $_ -in "ConfigurationPolicy", "IDeviceManagementPolicy" } {
-            return (Get-ConfigurationPolicySummary -Payload $parsed -MaxSettings $MaxSettings)
+            Get-ConfigurationPolicySummary -Payload $parsed -MaxSettings $MaxSettings
         }
         "MobileApp" {
-            return (Get-MobileAppSummary -Payload $parsed)
+            Get-MobileAppSummary -Payload $parsed
         }
         { $_ -in "DeviceHealthScript", "DeviceManagementScript" } {
-            return (Get-DeviceHealthScriptSummary -Payload $parsed)
+            Get-DeviceHealthScriptSummary -Payload $parsed
         }
         { $_ -in "DeviceCompliancePolicy" } {
-            return (Get-CompliancePolicySummary -Payload $parsed -MaxSettings $MaxSettings)
+            Get-CompliancePolicySummary -Payload $parsed -MaxSettings $MaxSettings
         }
         "OperationApprovalPolicy" {
-            return (Get-ApprovalPolicySummary -Payload $parsed)
+            Get-ApprovalPolicySummary -Payload $parsed
         }
         { $_ -in "RoleDefinition", "DeviceAndAppManagementRoleDefinition" } {
-            return (Get-RoleDefinitionSummary -Payload $parsed -MaxSettings $MaxSettings)
+            Get-RoleDefinitionSummary -Payload $parsed -MaxSettings $MaxSettings
         }
         "ManagedDevice" {
-            return (Get-ManagedDeviceSummary -Payload $parsed)
+            Get-ManagedDeviceSummary -Payload $parsed
         }
         default {
-            return (Get-GenericPayloadSummary -Payload $parsed)
+            Get-GenericPayloadSummary -Payload $parsed
         }
     }
+
+    # Detect name change from patchPayload and annotate the Name field
+    if ($Request.patchPayload) {
+        try {
+            $patchParsed = if ($Request.patchPayload -is [string]) { $Request.patchPayload | ConvertFrom-Json } else { $Request.patchPayload }
+            $newName = $patchParsed.displayName
+            if (-not $newName) { $newName = $patchParsed.name }
+            if ($newName) {
+                $currentName = $parsed.displayName
+                if (-not $currentName) { $currentName = $parsed.name }
+                if ($currentName -and $newName -ne $currentName) {
+                    for ($i = 0; $i -lt $typeSummary.Count; $i++) {
+                        if ($typeSummary[$i].Label -eq "Name") {
+                            $typeSummary[$i] = [PSCustomObject]@{ Label = "Name"; Value = "$currentName -> $newName" }
+                            break
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+    }
+
+    return $typeSummary
+}
+
+function Get-PayloadResourceId {
+    param([object]$Request)
+    try {
+        $payloadRaw = $Request.payload
+        if (-not $payloadRaw) { return $null }
+        $parsed = if ($payloadRaw -is [string]) { $payloadRaw | ConvertFrom-Json } else { $payloadRaw }
+        if ($parsed -is [array]) { $parsed = $parsed[0] }
+        $rid = if ($parsed -is [hashtable]) { $parsed["id"] } else { $parsed.id }
+        if (-not [string]::IsNullOrWhiteSpace($rid)) { return $rid }
+    }
+    catch { }
+    return $null
 }
 
 function Get-RelatedAssignments {
     param([object]$Request)
 
     $payloadName = $Request.payloadName
-    if ([string]::IsNullOrWhiteSpace($payloadName)) { return $null }
+    $payloadResourceId = Get-PayloadResourceId -Request $Request
+
+    if ([string]::IsNullOrWhiteSpace($payloadName) -and [string]::IsNullOrWhiteSpace($payloadResourceId)) { return $null }
 
     try {
         $uri = "https://graph.microsoft.com/beta/deviceManagement/operationApprovalRequests"
@@ -1459,10 +1508,23 @@ function Get-RelatedAssignments {
             if ($response.value) { $allRequests += $response.value }
         }
 
-        $related = $allRequests | Where-Object {
-            $_.payloadName -ieq $payloadName -and
-            $_.id -ne $Request.id -and
-            $_.addedAssignments
+        # Match by stable resource ID from payload (survives renames)
+        $related = $null
+        if (-not [string]::IsNullOrWhiteSpace($payloadResourceId)) {
+            $related = $allRequests | Where-Object {
+                $_.id -ne $Request.id -and
+                $_.addedAssignments -and
+                (Get-PayloadResourceId -Request $_) -eq $payloadResourceId
+            }
+        }
+
+        # Fall back to name matching if ID-based match found nothing
+        if (-not $related -and -not [string]::IsNullOrWhiteSpace($payloadName)) {
+            $related = $allRequests | Where-Object {
+                $_.payloadName -ieq $payloadName -and
+                $_.id -ne $Request.id -and
+                $_.addedAssignments
+            }
         }
 
         if ($related) {
@@ -2159,7 +2221,11 @@ function Show-PendingActions {
     if (-not $assignments) {
         $assignments = Get-RelatedAssignments -Request $Request
     }
-    $assignmentsSummary = Get-AssignmentsSummary -Assignments $assignments -ExistingAssignments $Request.existingAssignments
+    $existingAssignments = $Request.existingAssignments
+    if (-not $existingAssignments -and $assignments) {
+        $existingAssignments = Get-RelatedAssignments -Request $Request
+    }
+    $assignmentsSummary = Get-AssignmentsSummary -Assignments $assignments -ExistingAssignments $existingAssignments
     $scopeTagSummary = Get-ScopeTagChangeSummary -Request $Request
     Show-PayloadDetails -Summary $payloadSummary -AssignmentsSummary $assignmentsSummary -ScopeTagSummary $scopeTagSummary
 

@@ -894,10 +894,9 @@ function Open-PayloadForReview {
 
         $payloadSummary = Get-PayloadSummary -Request $Request -MaxSettings 999
         $assignments = $Request.addedAssignments
-        if (-not $assignments) { $assignments = Get-RelatedAssignments -Request $Request }
         $existingAssignments = $Request.existingAssignments
-        if (-not $existingAssignments -and $assignments) {
-            $existingAssignments = Get-RelatedAssignments -Request $Request
+        if (-not $existingAssignments) {
+            $existingAssignments = Get-CurrentResourceAssignments -Request $Request
         }
         $assignmentsSummary = Get-AssignmentsSummary -Assignments $assignments -ExistingAssignments $existingAssignments
 
@@ -1489,61 +1488,48 @@ function Get-PayloadResourceId {
     return $null
 }
 
-function Get-RelatedAssignments {
+function Get-CurrentResourceAssignments {
     param([object]$Request)
 
-    $payloadName = $Request.payloadName
-    $payloadResourceId = Get-PayloadResourceId -Request $Request
+    $resourceId = Get-PayloadResourceId -Request $Request
+    $payloadType = $Request.payloadType
 
-    if ([string]::IsNullOrWhiteSpace($payloadName) -and [string]::IsNullOrWhiteSpace($payloadResourceId)) { return $null }
+    if ([string]::IsNullOrWhiteSpace($resourceId) -or [string]::IsNullOrWhiteSpace($payloadType)) {
+        return $null
+    }
+
+    # Map payload types to their assignment endpoints
+    $endpointMap = @{
+        "MobileApp"                            = "deviceAppManagement/mobileApps"
+        "DeviceConfiguration"                  = "deviceManagement/deviceConfigurations"
+        "DeviceCompliancePolicy"               = "deviceManagement/deviceCompliancePolicies"
+        "WindowsAutopilotDeploymentProfile"    = "deviceManagement/windowsAutopilotDeploymentProfiles"
+        "DeviceManagementScript"               = "deviceManagement/deviceManagementScripts"
+        "DeviceHealthScript"                   = "deviceManagement/deviceHealthScripts"
+        "GroupPolicyConfiguration"             = "deviceManagement/groupPolicyConfigurations"
+        "ConfigurationPolicy"                  = "deviceManagement/configurationPolicies"
+        "DeviceEnrollmentConfiguration"        = "deviceManagement/deviceEnrollmentConfigurations"
+        "WindowsFeatureUpdateProfile"          = "deviceManagement/windowsFeatureUpdateProfiles"
+        "WindowsQualityUpdateProfile"          = "deviceManagement/windowsQualityUpdateProfiles"
+        "WindowsDriverUpdateProfile"           = "deviceManagement/windowsDriverUpdateProfiles"
+    }
+
+    $basePath = $endpointMap[$payloadType]
+    if (-not $basePath) {
+        return $null
+    }
 
     try {
-        $uri = "https://graph.microsoft.com/beta/deviceManagement/operationApprovalRequests"
-        $allRequests = @()
-        $response = Invoke-MgGraphRequest -Uri $uri -Method GET
-        if ($response.value) { $allRequests += $response.value }
+        $uri = "https://graph.microsoft.com/beta/$basePath/$resourceId/assignments"
+        $response = Invoke-MgGraphRequest -Uri $uri -Method GET -ErrorAction Stop
 
-        while ($response.'@odata.nextLink') {
-            $response = Invoke-MgGraphRequest -Uri $response.'@odata.nextLink' -Method GET
-            if ($response.value) { $allRequests += $response.value }
-        }
-
-        # Match by stable resource ID from payload (survives renames)
-        $related = $null
-        if (-not [string]::IsNullOrWhiteSpace($payloadResourceId)) {
-            $related = $allRequests | Where-Object {
-                $_.id -ne $Request.id -and
-                $_.addedAssignments -and
-                (Get-PayloadResourceId -Request $_) -eq $payloadResourceId
-            }
-        }
-
-        # Fall back to name matching if ID-based match found nothing
-        if (-not $related -and -not [string]::IsNullOrWhiteSpace($payloadName)) {
-            $related = $allRequests | Where-Object {
-                $_.payloadName -ieq $payloadName -and
-                $_.id -ne $Request.id -and
-                $_.addedAssignments
-            }
-        }
-
-        if ($related) {
-            $allAssignments = @()
-            foreach ($rel in $related) {
-                $parsed = if ($rel.addedAssignments -is [string]) {
-                    $rel.addedAssignments | ConvertFrom-Json
-                }
-                else {
-                    $rel.addedAssignments
-                }
-                if ($parsed) { $allAssignments += $parsed }
-            }
-            if ($allAssignments.Count -gt 0) {
-                return $allAssignments
-            }
+        if ($response.value -and $response.value.Count -gt 0) {
+            return $response.value
         }
     }
-    catch { }
+    catch {
+        # Resource might not exist yet or no permissions - that's ok
+    }
 
     return $null
 }
@@ -1554,16 +1540,19 @@ function Get-AssignmentsSummary {
         [object]$ExistingAssignments
     )
 
-    if (-not $Assignments) { return @() }
+    # Handle empty assignments - still need to show removals
+    if (-not $Assignments -and -not $ExistingAssignments) { return @() }
 
-    try {
-        $parsed = if ($Assignments -is [string]) { $Assignments | ConvertFrom-Json } else { $Assignments }
+    $parsed = @()
+    if ($Assignments) {
+        try {
+            $parsed = if ($Assignments -is [string]) { $Assignments | ConvertFrom-Json } else { $Assignments }
+            if (-not $parsed) { $parsed = @() }
+        }
+        catch {
+            return @([PSCustomObject]@{ Label = "Assignments"; Value = "Unable to parse" })
+        }
     }
-    catch {
-        return @([PSCustomObject]@{ Label = "Assignments"; Value = "Unable to parse" })
-    }
-
-    if (-not $parsed -or $parsed.Count -eq 0) { return @() }
 
     # Parse existing assignments to determine which are new
     $existingKeys = @{}
@@ -1672,6 +1661,9 @@ function Get-AssignmentsSummary {
         }
         catch { }
     }
+
+    # Only return if we have assignment changes to show
+    if ($assignmentItems.Count -eq 0) { return @() }
 
     $summary += [PSCustomObject]@{ Label = "Assignments ($($parsed.Count))"; Value = ""; IsNew = $false }
     $summary += $assignmentItems
@@ -2218,12 +2210,9 @@ function Show-PendingActions {
     $payloadSummary = Get-PayloadSummary -Request $Request
 
     $assignments = $Request.addedAssignments
-    if (-not $assignments) {
-        $assignments = Get-RelatedAssignments -Request $Request
-    }
     $existingAssignments = $Request.existingAssignments
-    if (-not $existingAssignments -and $assignments) {
-        $existingAssignments = Get-RelatedAssignments -Request $Request
+    if (-not $existingAssignments) {
+        $existingAssignments = Get-CurrentResourceAssignments -Request $Request
     }
     $assignmentsSummary = Get-AssignmentsSummary -Assignments $assignments -ExistingAssignments $existingAssignments
     $scopeTagSummary = Get-ScopeTagChangeSummary -Request $Request

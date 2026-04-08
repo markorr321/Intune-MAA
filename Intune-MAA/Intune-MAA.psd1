@@ -1,6 +1,6 @@
 @{
     RootModule        = 'Intune-MAA.psm1'
-    ModuleVersion     = '1.0.4'
+    ModuleVersion     = '1.0.5'
     GUID              = 'a3f7c8d1-4e2b-4a9f-b6c3-8d5e1f2a7b90'
     Author            = 'Mark Orr'
     CompanyName       = 'orr365'
@@ -31,6 +31,12 @@
             LicenseUri   = 'https://github.com/markorr321/Intune-MAA/blob/master/LICENSE'
             ProjectUri   = 'https://github.com/markorr321/Intune-MAA'
             ReleaseNotes = @'
+## 1.0.5
+- Fix assignments incorrectly marked as [NEW] after policy rename
+- Fix scope tags incorrectly marked as [NEW] when no baseline exists
+- Show name changes as "OldName -> NewName" in review screen
+- Match previous approval requests by resource ID to survive renames
+
 ## 1.0.4
 - [NEW] / [REMOVED] labels for assignment changes (green/red highlighting)
 - Scope tag change detection with display name resolution

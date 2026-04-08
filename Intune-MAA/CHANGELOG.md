@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.5 - 2026-04-08
+
+### Fixed
+- Assignments incorrectly marked as [NEW] after policy rename
+- Scope tags incorrectly marked as [NEW] when no baseline exists
+
+### Added
+- Name change detection showing "OldName -> NewName" in review screen
+- Resource ID-based matching for previous approval requests (survives renames)
+
 ## 1.0.4 - 2026-04-07
 
 ### Added

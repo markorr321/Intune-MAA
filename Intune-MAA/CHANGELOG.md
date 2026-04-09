@@ -5,6 +5,7 @@
 ### Fixed
 - Assignments incorrectly marked as [NEW] after policy rename
 - Scope tags incorrectly marked as [NEW] when no baseline exists
+- Authenticode signature blocks in scripts not preserved when viewing in editor
 
 ### Added
 - Name change detection showing "OldName -> NewName" in review screen

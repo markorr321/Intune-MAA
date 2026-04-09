@@ -131,13 +131,13 @@ function Test-IntuneMAAUpdate {
         }
 
         $currentModule = Get-Module -Name Intune-MAA |
-            Sort-Object Version -Descending |
-            Select-Object -First 1
+        Sort-Object Version -Descending |
+        Select-Object -First 1
 
         if (-not $currentModule) {
             $currentModule = Get-Module -Name Intune-MAA -ListAvailable |
-                Sort-Object Version -Descending |
-                Select-Object -First 1
+            Sort-Object Version -Descending |
+            Select-Object -First 1
         }
 
         if (-not $currentModule) {
@@ -152,20 +152,24 @@ function Test-IntuneMAAUpdate {
 
             try {
                 $null = Invoke-WebRequest -Uri $url -UseBasicParsing -MaximumRedirection 0 -TimeoutSec 5 -ErrorAction Stop
-            } catch {
+            }
+            catch {
                 if ($_.Exception.Response -and $_.Exception.Response.Headers) {
                     try {
                         $location = $_.Exception.Response.Headers.GetValues('Location') | Select-Object -First 1
                         if ($location) {
                             $versionString = Split-Path -Path $location -Leaf
                             $latestVersion = [version]$versionString
-                        } else {
+                        }
+                        else {
                             return
                         }
-                    } catch {
+                    }
+                    catch {
                         return
                     }
-                } else {
+                }
+                else {
                     return
                 }
             }
@@ -178,11 +182,13 @@ function Test-IntuneMAAUpdate {
                 Show-UpdateNotification -CurrentVersion $currentVersion -LatestVersion $latestVersion
             }
 
-        } catch {
+        }
+        catch {
             return
         }
 
-    } catch {
+    }
+    catch {
         return
     }
 }
@@ -847,11 +853,12 @@ function Open-ScriptForReview {
 
     foreach ($scriptItem in $scripts) {
         try {
-            $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($scriptItem.Content))
+            $bytes = [System.Convert]::FromBase64String($scriptItem.Content)
+            $decoded = [System.Text.Encoding]::UTF8.GetString($bytes)
 
             $safeName = $scriptItem.Name -replace '[^\w\-\.]', '_'
             $tempFile = Join-Path $env:TEMP "MAA_Review_$safeName.ps1"
-            $decoded | Out-File -FilePath $tempFile -Encoding UTF8 -Force
+            [System.IO.File]::WriteAllText($tempFile, $decoded, [System.Text.Encoding]::UTF8)
 
             $editorDisplay = if ($Editor -eq "code") { "VS Code" } else { $Editor }
             Write-Host "  Opening in $($editorDisplay): " -ForegroundColor Cyan -NoNewline
@@ -1500,18 +1507,18 @@ function Get-CurrentResourceAssignments {
 
     # Map payload types to their assignment endpoints
     $endpointMap = @{
-        "MobileApp"                            = "deviceAppManagement/mobileApps"
-        "DeviceConfiguration"                  = "deviceManagement/deviceConfigurations"
-        "DeviceCompliancePolicy"               = "deviceManagement/deviceCompliancePolicies"
-        "WindowsAutopilotDeploymentProfile"    = "deviceManagement/windowsAutopilotDeploymentProfiles"
-        "DeviceManagementScript"               = "deviceManagement/deviceManagementScripts"
-        "DeviceHealthScript"                   = "deviceManagement/deviceHealthScripts"
-        "GroupPolicyConfiguration"             = "deviceManagement/groupPolicyConfigurations"
-        "ConfigurationPolicy"                  = "deviceManagement/configurationPolicies"
-        "DeviceEnrollmentConfiguration"        = "deviceManagement/deviceEnrollmentConfigurations"
-        "WindowsFeatureUpdateProfile"          = "deviceManagement/windowsFeatureUpdateProfiles"
-        "WindowsQualityUpdateProfile"          = "deviceManagement/windowsQualityUpdateProfiles"
-        "WindowsDriverUpdateProfile"           = "deviceManagement/windowsDriverUpdateProfiles"
+        "MobileApp"                         = "deviceAppManagement/mobileApps"
+        "DeviceConfiguration"               = "deviceManagement/deviceConfigurations"
+        "DeviceCompliancePolicy"            = "deviceManagement/deviceCompliancePolicies"
+        "WindowsAutopilotDeploymentProfile" = "deviceManagement/windowsAutopilotDeploymentProfiles"
+        "DeviceManagementScript"            = "deviceManagement/deviceManagementScripts"
+        "DeviceHealthScript"                = "deviceManagement/deviceHealthScripts"
+        "GroupPolicyConfiguration"          = "deviceManagement/groupPolicyConfigurations"
+        "ConfigurationPolicy"               = "deviceManagement/configurationPolicies"
+        "DeviceEnrollmentConfiguration"     = "deviceManagement/deviceEnrollmentConfigurations"
+        "WindowsFeatureUpdateProfile"       = "deviceManagement/windowsFeatureUpdateProfiles"
+        "WindowsQualityUpdateProfile"       = "deviceManagement/windowsQualityUpdateProfiles"
+        "WindowsDriverUpdateProfile"        = "deviceManagement/windowsDriverUpdateProfiles"
     }
 
     $basePath = $endpointMap[$payloadType]

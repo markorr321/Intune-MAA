@@ -25,6 +25,7 @@ $script:ResourceTypeMap = @{
 }
 
 $script:GroupNameCache = @{}
+$script:GroupInfoCache = @{}
 $script:MSALAssemblyPaths = @{}
 $script:MSALHelperCompiled = $false
 
@@ -961,6 +962,85 @@ function Open-PayloadForReview {
     }
 }
 
+function Resolve-GroupInfo {
+    param([string]$GroupId)
+
+    if ([string]::IsNullOrWhiteSpace($GroupId)) {
+        return @{ Name = $GroupId; GroupType = $null; MemberCount = $null }
+    }
+
+    if ($script:GroupInfoCache.ContainsKey($GroupId)) {
+        return $script:GroupInfoCache[$GroupId]
+    }
+
+    $info = @{ Name = $GroupId; GroupType = $null; MemberCount = $null }
+
+    try {
+        $grp = Invoke-MgGraphRequest -Uri "https://graph.microsoft.com/v1.0/groups/$GroupId`?`$select=displayName,groupTypes,membershipRule" -Method GET -ErrorAction SilentlyContinue
+        if ($grp.displayName) {
+            # Strip GUIDs from display name for cleaner output
+            $cleanName = $grp.displayName -replace '\s*\(?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\)?\s*', ''
+            $cleanName = $cleanName.TrimEnd(' ', '-', ':')
+            if ([string]::IsNullOrWhiteSpace($cleanName)) { $cleanName = $grp.displayName }
+            $info.Name = $cleanName
+            $script:GroupNameCache[$GroupId] = $cleanName
+        }
+
+        # Determine group type (Users vs Devices)
+        $isDynamic = $grp.groupTypes -and ($grp.groupTypes -contains "DynamicMembership")
+        if ($isDynamic -and $grp.membershipRule) {
+            if ($grp.membershipRule -match '^\s*\(?\s*device\.') {
+                $info.GroupType = "Devices"
+            }
+            elseif ($grp.membershipRule -match '^\s*\(?\s*user\.') {
+                $info.GroupType = "Users"
+            }
+        }
+
+        # If not dynamic or rule didn't match, check members to determine type
+        if (-not $info.GroupType) {
+            try {
+                $members = Invoke-MgGraphRequest -Uri "https://graph.microsoft.com/v1.0/groups/$GroupId/members?`$top=5&`$select=id" -Method GET -ErrorAction SilentlyContinue
+                if (-not $members.value -or $members.value.Count -eq 0) {
+                    $info.GroupType = "Empty"
+                }
+                else {
+                    $types = $members.value | ForEach-Object { $_.'@odata.type' } | Select-Object -Unique
+                    $hasUsers = $types -contains '#microsoft.graph.user'
+                    $hasDevices = $types -contains '#microsoft.graph.device'
+                    if ($hasUsers -and $hasDevices) {
+                        $info.GroupType = "Mixed"
+                    }
+                    elseif ($hasDevices) {
+                        $info.GroupType = "Devices"
+                    }
+                    elseif ($hasUsers) {
+                        $info.GroupType = "Users"
+                    }
+                    else {
+                        $info.GroupType = "Mixed"
+                    }
+                }
+            }
+            catch { }
+        }
+
+        # Get member count
+        try {
+            $countUri = "https://graph.microsoft.com/v1.0/groups/$GroupId/members/`$count"
+            $count = Invoke-MgGraphRequest -Uri $countUri -Method GET -Headers @{ "ConsistencyLevel" = "eventual" } -ErrorAction SilentlyContinue
+            $info.MemberCount = [int]$count
+        }
+        catch { }
+    }
+    catch {
+        $script:GroupNameCache[$GroupId] = $null
+    }
+
+    $script:GroupInfoCache[$GroupId] = $info
+    return $info
+}
+
 function Resolve-GroupName {
     param([string]$GroupId)
 
@@ -972,18 +1052,8 @@ function Resolve-GroupName {
         return $GroupId
     }
 
-    try {
-        $grp = Invoke-MgGraphRequest -Uri "https://graph.microsoft.com/v1.0/groups/$GroupId`?`$select=displayName" -Method GET -ErrorAction SilentlyContinue
-        if ($grp.displayName) {
-            $script:GroupNameCache[$GroupId] = $grp.displayName
-            return $grp.displayName
-        }
-    }
-    catch {
-        $script:GroupNameCache[$GroupId] = $null
-    }
-
-    return $GroupId
+    $info = Resolve-GroupInfo -GroupId $GroupId
+    return $info.Name
 }
 
 function Resolve-ScopeTagName {
@@ -1610,8 +1680,8 @@ function Get-AssignmentsSummary {
 
         $groupId = $target.groupId
         if ($groupId) {
-            $groupName = Resolve-GroupName -GroupId $groupId
-            $targetDisplay = "$targetDisplay`: $groupName"
+            $groupInfo = Resolve-GroupInfo -GroupId $groupId
+            $targetDisplay = "$targetDisplay`: $($groupInfo.Name)"
         }
 
         $intent = $assignment.intent
@@ -1619,13 +1689,19 @@ function Get-AssignmentsSummary {
             $targetDisplay = "$targetDisplay ($intent)"
         }
 
+        # Append group details inline: - Type · Count
+        if ($groupId -and $groupInfo) {
+            $groupDetails = @()
+            if ($groupInfo.GroupType) { $groupDetails += $groupInfo.GroupType }
+            if ($null -ne $groupInfo.MemberCount) { $groupDetails += "$($groupInfo.MemberCount)" }
+            if ($groupDetails.Count -gt 0) {
+                $targetDisplay = "$targetDisplay - $($groupDetails -join ' · ')"
+            }
+        }
+
         # Determine if this assignment is new
         $key = "$targetType|$groupId|$intent"
         $isNew = -not $existingKeys.ContainsKey($key)
-
-        if ($isNew) {
-            $targetDisplay = "[NEW] $targetDisplay"
-        }
 
         $assignmentItems += [PSCustomObject]@{ Label = ""; Value = "    $targetDisplay"; IsNew = $isNew; IsRemoved = $false }
     }
@@ -1653,15 +1729,24 @@ function Get-AssignmentsSummary {
                     }
 
                     if ($eGroupId) {
-                        $groupName = Resolve-GroupName -GroupId $eGroupId
-                        $targetDisplay = "$targetDisplay`: $groupName"
+                        $groupInfo = Resolve-GroupInfo -GroupId $eGroupId
+                        $targetDisplay = "$targetDisplay`: $($groupInfo.Name)"
                     }
 
                     if ($eIntent) {
                         $targetDisplay = "$targetDisplay ($eIntent)"
                     }
 
-                    $targetDisplay = "[REMOVED] $targetDisplay"
+                    # Append group details inline: - Type · Count
+                    if ($eGroupId -and $groupInfo) {
+                        $groupDetails = @()
+                        if ($groupInfo.GroupType) { $groupDetails += $groupInfo.GroupType }
+                        if ($null -ne $groupInfo.MemberCount) { $groupDetails += "$($groupInfo.MemberCount)" }
+                        if ($groupDetails.Count -gt 0) {
+                            $targetDisplay = "$targetDisplay - $($groupDetails -join ' · ')"
+                        }
+                    }
+
                     $assignmentItems += [PSCustomObject]@{ Label = ""; Value = "    $targetDisplay"; IsNew = $false; IsRemoved = $true }
                 }
             }

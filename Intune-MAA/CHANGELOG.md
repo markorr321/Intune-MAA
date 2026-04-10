@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.6 - 2026-04-10
+
+### Added
+- Group type detection (Users, Devices, Mixed, Empty) displayed on assignment lines
+- Member count shown inline for each group assignment
+- GUID stripping from group display names for cleaner output
+
+### Changed
+- Assignment change indicators now use color coding only (green/red) instead of [NEW]/[REMOVED] text labels
+
 ## 1.0.5 - 2026-04-08
 
 ### Fixed

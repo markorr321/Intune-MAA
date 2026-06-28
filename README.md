@@ -2,7 +2,7 @@
 
 [![PowerShell Gallery](https://img.shields.io/powershellgallery/v/Intune-MAA?label=PowerShell%20Gallery&color=blue)](https://www.powershellgallery.com/packages/Intune-MAA) [![PowerShell 7+](https://img.shields.io/badge/PowerShell-7.0%2B-blue?logo=powershell&logoColor=white)](https://github.com/PowerShell/PowerShell)
 
-Manage Microsoft Intune Multi Admin Approval (MAA) requests with PowerShell. Provides a full-screen terminal UI for reviewing pending approval requests, viewing payload details, and approving or denying requests with justification. Just run `Start-MAAApproval` — works out of the box with no configuration, or bring your own app registration for full control.
+Manage Microsoft Intune Multi Admin Approval (MAA) requests with PowerShell. Provides a full-screen terminal UI for reviewing pending approval requests, viewing payload details, and approving or rejecting requests with justification — individually or in bulk. Just run `Start-MAAApproval` — works out of the box with no configuration, or bring your own app registration for full control.
 
 ![Intune-MAA demo](Intune-MAA.gif)
 
@@ -84,6 +84,15 @@ Start-MAAApproval -ClientId "your-app-id" -TenantId "your-tenant-id"
 ```
 
 On macOS, `Configure-IntuneMAA` will also offer to add the credentials to your PowerShell profile for persistence across sessions.
+
+## Approving & Rejecting
+
+From the pending request list you can:
+
+- **Select a request** (`1`–`9`) to review its details, then **Approve** (`A`) or **Reject** (`D`) it.
+- **Approve All** (`A`) or **Reject All** (`D`) every pending request at once.
+
+Both approve and reject prompt for a justification (press Enter to use a default), and you cannot action your own requests.
 
 ## Payload Review
 

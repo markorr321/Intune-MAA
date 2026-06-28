@@ -475,6 +475,7 @@ function Show-HelpMenu {
     Write-Host "  MAIN MENU" -ForegroundColor Yellow
     Write-Host "    1-9       Select a pending request"
     Write-Host "    A         Approve all pending requests"
+    Write-Host "    D         Reject all pending requests"
     Write-Host "    R         Refresh the request list"
     Write-Host "    H         Show this help menu"
     Write-Host "    B         Go back"
@@ -494,7 +495,7 @@ function Show-HelpMenu {
     Write-Host ""
     Write-Host "  NOTES" -ForegroundColor Yellow
     Write-Host "    - You cannot approve your own requests"
-    Write-Host "    - Justification is required for approvals"
+    Write-Host "    - Justification is requested for approvals and rejections"
     Write-Host "    - Disable update checks: `$env:INTUNEMAA_DISABLE_UPDATE_CHECK = 'true'"
     Write-Host ""
     Write-Host "  https://www.powershellgallery.com/packages/Intune-MAA" -ForegroundColor DarkGray
@@ -1996,12 +1997,15 @@ function Approve-MAARequest {
 }
 
 function Cancel-MAARequest {
-    param([string]$RequestId)
+    param(
+        [string]$RequestId,
+        [string]$Justification = "Denied via MAA Manager"
+    )
 
     $endpoint = "https://graph.microsoft.com/beta/deviceManagement/operationApprovalRequests/$RequestId/reject"
     $body = @{
         approvalSource = "AdminConsole"
-        justification  = "Cancelled via MAA Manager"
+        justification  = $Justification
     } | ConvertTo-Json
 
     try {
@@ -2009,7 +2013,12 @@ function Cancel-MAARequest {
         return @{ Success = $true; Error = $null }
     }
     catch {
-        return @{ Success = $false; Error = $_.ErrorDetails.Message }
+        $errMsg = $_.Exception.Message
+        $errDetails = $null
+        try { $errDetails = $_.ErrorDetails.Message } catch {}
+        $fullErr = "Exception: $errMsg"
+        if ($errDetails) { $fullErr = "$fullErr ; Details: $errDetails" }
+        return @{ Success = $false; Error = $fullErr }
     }
 }
 
@@ -2600,6 +2609,7 @@ function Start-ApprovalManager {
         if ($pendingRequests.Count -gt 0) {
             $actions += @{ Key = "1-$($pendingRequests.Count)"; Text = "Select" }
             $actions += @{ Key = "A"; Text = "Approve All" }
+            $actions += @{ Key = "D"; Text = "Reject All" }
         }
         $actions += @{ Key = "R"; Text = "Refresh" }
         $actions += @{ Key = "H"; Text = "Help" }
@@ -2668,6 +2678,54 @@ function Start-ApprovalManager {
                     Wait-ForKeyPress
                 }
             }
+            "D" {
+                if ($pendingRequests.Count -eq 0) {
+                    Write-Host ""
+                    Write-Host "  No requests to reject." -ForegroundColor Yellow
+                    Start-Sleep -Milliseconds 800
+                    continue
+                }
+
+                Show-Header -UserEmail $UserEmail
+                Write-Host "  REJECT ALL PENDING REQUESTS" -ForegroundColor Red
+                Write-Host ""
+                Write-Host "  About to reject $($pendingRequests.Count) request(s)." -ForegroundColor Yellow
+                Write-Host ""
+                Show-ControlBar -NoBack -ReserveLines 1
+                $justInput = Read-Host "  Justification (or press Enter for default)"
+                if ([string]::IsNullOrWhiteSpace($justInput)) { $justInput = "Denied via MAA Manager" }
+                Write-Host ""
+                Show-ControlBar -NoBack -ReserveLines 1
+                $confirm = Read-Host "  Confirm? (Y/N)"
+                [Console]::Write("$([char]27)[J")
+
+                if ($confirm.ToUpper() -eq "Y") {
+                    Write-Host ""
+                    $rejected = 0
+                    foreach ($req in $pendingRequests) {
+                        $name = $req.payloadName
+                        if ([string]::IsNullOrWhiteSpace($name)) { $name = $req.displayName }
+                        if ([string]::IsNullOrWhiteSpace($name)) { $name = "Request" }
+                        Write-Host "  Rejecting: $name... " -ForegroundColor Cyan -NoNewline
+                        $result = Cancel-MAARequest -RequestId $req.id -Justification $justInput
+                        if ($result.Success) {
+                            Write-Host "Done" -ForegroundColor Green
+                            $rejected++
+                        }
+                        else {
+                            Write-Host "Failed" -ForegroundColor Red
+                            if ($result.Error) {
+                                Write-Host "        Error: $($result.Error)" -ForegroundColor DarkRed
+                            }
+                        }
+                        Start-Sleep -Milliseconds 300
+                    }
+                    Write-Host ""
+                    Write-Host "  SUCCESS: " -ForegroundColor Green -NoNewline
+                    Write-Host "Rejected $rejected of $($pendingRequests.Count) requests" -ForegroundColor White
+                    Wait-ForKeyPress
+                }
+            }
             { $_ -match '^[0-9]$' } {
                 $pIdx = [int]$pSelection - 1
                 if ($pIdx -ge 0 -and $pIdx -lt $pendingRequests.Count) {
@@ -2705,11 +2763,15 @@ function Start-ApprovalManager {
                             "D" {
                                 Write-Host ""
                                 Show-ControlBar -ReserveLines 1
+                                $justInput = Read-Host "  Justification (or press Enter for default)"
+                                if ([string]::IsNullOrWhiteSpace($justInput)) { $justInput = "Denied via MAA Manager" }
+                                Write-Host ""
+                                Show-ControlBar -ReserveLines 1
                                 $confirm = Read-Host "  Deny this request? (Y/N)"
                                 [Console]::Write("$([char]27)[J")
                                 if ($confirm.ToUpper() -eq "Y") {
                                     Write-Host "  Denying request... " -ForegroundColor Cyan -NoNewline
-                                    $result = Cancel-MAARequest -RequestId $selectedPending.id
+                                    $result = Cancel-MAARequest -RequestId $selectedPending.id -Justification $justInput
                                     if ($result.Success) {
                                         Write-Host "SUCCESS" -ForegroundColor Green
                                     }

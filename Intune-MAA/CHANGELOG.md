@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.7 - 2026-06-28
+
+### Added
+- "Reject All" bulk action to reject every pending request at once (main menu `D`)
+- Justification prompt when rejecting a request (single and bulk), matching the approve flow
+
+### Changed
+- `Cancel-MAARequest` now accepts a `-Justification` parameter and returns detailed Graph error messages
+
 ## 1.0.6 - 2026-04-10
 
 ### Added

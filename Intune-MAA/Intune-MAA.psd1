@@ -1,6 +1,6 @@
 @{
     RootModule        = 'Intune-MAA.psm1'
-    ModuleVersion     = '1.0.6'
+    ModuleVersion     = '1.0.7'
     GUID              = 'a3f7c8d1-4e2b-4a9f-b6c3-8d5e1f2a7b90'
     Author            = 'Mark Orr'
     CompanyName       = 'orr365'
@@ -28,9 +28,14 @@
     PrivateData = @{
         PSData = @{
             Tags         = @('Intune', 'MAA', 'MultiAdminApproval', 'MicrosoftGraph', 'Approval', 'MEM', 'Endpoint')
-            LicenseUri   = 'https://github.com/markorr321/Intune-MAA/blob/master/LICENSE'
+            LicenseUri   = 'https://github.com/markorr321/Intune-MAA/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/markorr321/Intune-MAA'
             ReleaseNotes = @'
+## 1.0.7
+- Add "Reject All" bulk action to reject every pending request at once
+- Prompt for a justification when rejecting (single and bulk), matching approve
+- Cancel-MAARequest now accepts -Justification and returns detailed errors
+
 ## 1.0.6
 - Show group type (Users, Devices, Mixed, Empty) and member count on assignment lines
 - Cleaner assignment display: color coding alone indicates new/removed (no text labels)

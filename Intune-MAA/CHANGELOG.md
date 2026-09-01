@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.8 - 2026-09-01
+
+### Fixed
+- "Unable to parse payload" shown in Details for Assign operations (Apps, Configuration Policies, and other workload types) — the Graph API returns a .NET type name string in `payload` for these requests; the fix falls back to `entitySnapshot`, which carries the full resource details
+- Whitespace-only payload strings no longer slip past the null check
+
 ## 1.0.7 - 2026-06-28
 
 ### Added

@@ -1481,23 +1481,31 @@ function Get-PayloadSummary {
         $Request.payload
     }
 
-    if (-not $payloadRaw) {
+    # If payload is a .NET type name rather than JSON, fall back to entitySnapshot
+    if ($payloadRaw -is [string] -and $payloadRaw -notmatch '^\s*[\[{]' -and $Request.entitySnapshot) {
+        $payloadRaw = $Request.entitySnapshot
+    }
+
+    if (-not $payloadRaw -or ($payloadRaw -is [string] -and [string]::IsNullOrWhiteSpace($payloadRaw))) {
         return @([PSCustomObject]@{ Label = "Details"; Value = "No payload data available" })
     }
 
-    try {
-        if ($payloadRaw -is [string]) {
+    $parsed = $null
+    if ($payloadRaw -is [string]) {
+        try {
             $parsed = $payloadRaw | ConvertFrom-Json
             if ($payloadRaw.TrimStart() -match '^\[') {
                 $parsed = @($parsed)
             }
         }
-        else {
-            $parsed = $payloadRaw
+        catch {
+            # Not JSON — surface the raw content so it's still useful
+            $preview = if ($payloadRaw.Length -gt 200) { $payloadRaw.Substring(0, 200) + "..." } else { $payloadRaw }
+            return @([PSCustomObject]@{ Label = "Payload (raw)"; Value = $preview })
         }
     }
-    catch {
-        return @([PSCustomObject]@{ Label = "Details"; Value = "Unable to parse payload" })
+    else {
+        $parsed = $payloadRaw
     }
 
     $typeSummary = switch -Wildcard ($shortType) {

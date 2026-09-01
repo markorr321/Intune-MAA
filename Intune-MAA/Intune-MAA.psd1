@@ -1,6 +1,6 @@
 @{
     RootModule        = 'Intune-MAA.psm1'
-    ModuleVersion     = '1.0.7'
+    ModuleVersion     = '1.0.8'
     GUID              = 'a3f7c8d1-4e2b-4a9f-b6c3-8d5e1f2a7b90'
     Author            = 'Mark Orr'
     CompanyName       = 'orr365'

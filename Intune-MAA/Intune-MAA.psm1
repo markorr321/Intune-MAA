@@ -804,6 +804,11 @@ function Get-ScriptContentFromPayload {
     $payload = $Request.payload
     if ([string]::IsNullOrWhiteSpace($payload)) { return @() }
 
+    # Same fallback as Get-PayloadSummary: Assign operations return a .NET type name, not JSON
+    if ($payload -notmatch '^\s*[\[{]' -and $Request.entitySnapshot) {
+        $payload = $Request.entitySnapshot
+    }
+
     try {
         $parsed = $payload | ConvertFrom-Json
     }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.9 - 2026-09-02
+
+### Fixed
+- Pressing `[S]` or `[N]` on an Assign-type request (DeviceHealthScript, Platform Script) opened the `.txt` details file instead of the actual `.ps1` script — `Get-ScriptContentFromPayload` now applies the same `entitySnapshot` fallback introduced in 1.0.8 for `Get-PayloadSummary`
+
 ## 1.0.8 - 2026-09-01
 
 ### Fixed

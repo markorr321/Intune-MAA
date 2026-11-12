@@ -1,6 +1,6 @@
 @{
     RootModule        = 'Intune-MAA.psm1'
-    ModuleVersion     = '1.0.10'
+    ModuleVersion     = '1.1.0'
     GUID              = 'a3f7c8d1-4e2b-4a9f-b6c3-8d5e1f2a7b90'
     Author            = 'Mark Orr'
     CompanyName       = 'orr365'
@@ -31,7 +31,7 @@
             LicenseUri   = 'https://github.com/markorr321/Intune-MAA/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/markorr321/Intune-MAA'
             ReleaseNotes = @'
-## 1.0.10
+## 1.1.0
 - Fix requests never loading in tenants with a large approval history - the unpaged Graph query exceeded Intune's ~15s backend limit and returned 503
 - Service failures are now reported instead of being cleared off screen and shown as "No requests pending your approval"
 - Retry each page up to 3 times, since per-page latency varies enough to fail intermittently

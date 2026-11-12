@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.10 - 2026-11-12
+## 1.1.0 - 2026-11-12
 
 ### Fixed
 - Pending requests never loaded in tenants with a large approval history — `Get-PendingMAARequests` asked Graph for every `operationApprovalRequest` in one response, which exceeds Intune's ~15s backend limit once a tenant accumulates a few hundred records (each carries up to ~96KB of `entitySnapshot`/`patchPayload`) and returns `503 DQCancelledOnRequestTimeout`. The request now pages with `$top=50` and a narrow `$select`

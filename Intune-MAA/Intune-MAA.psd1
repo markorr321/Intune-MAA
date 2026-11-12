@@ -1,6 +1,6 @@
 @{
     RootModule        = 'Intune-MAA.psm1'
-    ModuleVersion     = '1.0.9'
+    ModuleVersion     = '1.0.10'
     GUID              = 'a3f7c8d1-4e2b-4a9f-b6c3-8d5e1f2a7b90'
     Author            = 'Mark Orr'
     CompanyName       = 'orr365'
@@ -31,6 +31,13 @@
             LicenseUri   = 'https://github.com/markorr321/Intune-MAA/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/markorr321/Intune-MAA'
             ReleaseNotes = @'
+## 1.0.10
+- Fix requests never loading in tenants with a large approval history - the unpaged Graph query exceeded Intune's ~15s backend limit and returned 503
+- Service failures are now reported instead of being cleared off screen and shown as "No requests pending your approval"
+- Retry each page up to 3 times, since per-page latency varies enough to fail intermittently
+- Approving or rejecting no longer triggers a full re-fetch; actioned requests are dropped from the list in place
+- Request details are fetched per request on selection, which also populates payload fields the collection endpoint returns as null
+
 ## 1.0.9
 - Fix [S]/[N] opening .txt details instead of .ps1 script for Assign-type DeviceHealthScript/Platform Script requests
 

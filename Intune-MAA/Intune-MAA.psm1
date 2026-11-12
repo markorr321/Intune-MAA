@@ -3,6 +3,7 @@
 $script:DebugMode = $false
 $script:CustomClientId = $null
 $script:CustomTenantId = $null
+$script:LastFetchError = $null
 
 $script:ResourceTypeMap = @{
     "MobileApp"                            = "App"
@@ -1923,36 +1924,72 @@ function Connect-ToGraph {
     return $null
 }
 
+function Get-MAARequestDetail {
+    param([string]$RequestId)
+
+    # The collection response returns payload/patchPayload as null for some
+    # requests; fetching the entity directly fills them in.
+    $uri = "https://graph.microsoft.com/beta/deviceManagement/operationApprovalRequests/$RequestId"
+    try {
+        return Invoke-MgGraphRequest -Uri $uri -Method GET -ErrorAction Stop
+    }
+    catch {
+        return $null
+    }
+}
+
 function Get-PendingMAARequests {
     param([string]$UserEmail)
 
-    $uri = "https://graph.microsoft.com/beta/deviceManagement/operationApprovalRequests?`$filter=status eq 'needsApproval'"
+    $script:LastFetchError = $null
+
+    # This endpoint streams documents out of CosmosDB, so there is no index to
+    # seek or sort on: $skip silently returns nothing, $orderby is ignored, and
+    # $filter runs after paging while costing more than it saves. Every request
+    # in the tenant must therefore be walked and filtered on the client.
+    # The projection is for bandwidth, not latency - entitySnapshot alone can be
+    # 60KB per record. Page size barely affects total time, so keep it small for
+    # headroom under the backend's ~15s cliff: ~4s/page here, while $top=200+
+    # intermittently 503s as latency swings. Hence also the retry.
+    $select = 'id,status,requestDateTime,requestJustification,payloadName,displayName,' +
+        'payloadType,payloadOperation,payloadSubtype,payload,displayPayload,' +
+        'requestor,requiredOperationApprovalPolicyTypes'
+    $uri = "https://graph.microsoft.com/beta/deviceManagement/operationApprovalRequests?`$top=50&`$select=$select"
 
     try {
         $allRequests = @()
+        $page = 0
 
-        try {
-            $response = Invoke-MgGraphRequest -Uri $uri -Method GET
-            if ($response.value) { $allRequests += $response.value }
+        while ($uri) {
+            $page++
+            Write-Host "`r  Fetching pending requests... $($allRequests.Count) scanned   " -ForegroundColor Cyan -NoNewline
 
-            while ($response.'@odata.nextLink') {
-                $response = Invoke-MgGraphRequest -Uri $response.'@odata.nextLink' -Method GET
-                if ($response.value) { $allRequests += $response.value }
+            $response = $null
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+                try {
+                    $response = Invoke-MgGraphRequest -Uri $uri -Method GET -ErrorAction Stop
+                    break
+                }
+                catch {
+                    if ($attempt -eq 3) {
+                        $detail = $null
+                        try { $detail = $_.ErrorDetails.Message } catch {}
+                        $script:LastFetchError = "Graph request failed on page $page after scanning $($allRequests.Count) record(s): $($_.Exception.Message)"
+                        if ($detail) { $script:LastFetchError += " | $detail" }
+                        Write-Host "`r$(' ' * 60)`r" -NoNewline
+                        return @()
+                    }
+                    Start-Sleep -Milliseconds (750 * $attempt)
+                }
             }
-        }
-        catch {
-            $uri = "https://graph.microsoft.com/beta/deviceManagement/operationApprovalRequests"
-            $response = Invoke-MgGraphRequest -Uri $uri -Method GET
 
             if ($response.value) { $allRequests += $response.value }
-
-            while ($response.'@odata.nextLink') {
-                $response = Invoke-MgGraphRequest -Uri $response.'@odata.nextLink' -Method GET
-                if ($response.value) { $allRequests += $response.value }
-            }
-
-            $allRequests = $allRequests | Where-Object { $_.status -ieq "needsApproval" }
+            $uri = $response.'@odata.nextLink'
         }
+
+        Write-Host "`r$(' ' * 60)`r" -NoNewline
+
+        $allRequests = $allRequests | Where-Object { $_.status -ieq "needsApproval" }
 
         if ($script:DebugMode -and $allRequests.Count -gt 0) {
             Write-Host ""
@@ -1977,8 +2014,7 @@ function Get-PendingMAARequests {
 
     }
     catch {
-        Write-Host "  ERROR: " -ForegroundColor Red -NoNewline
-        Write-Host $_.Exception.Message -ForegroundColor White
+        $script:LastFetchError = $_.Exception.Message
         return @()
     }
 }
@@ -2155,7 +2191,17 @@ function Show-PendingRequestsList {
     Write-Host ""
 
     if ($Requests.Count -eq 0) {
-        Write-Host "  No requests pending your approval." -ForegroundColor Yellow
+        if ($script:LastFetchError) {
+            Write-Host "  COULD NOT RETRIEVE REQUESTS" -ForegroundColor Red
+            Write-Host ""
+            Write-Host "  $($script:LastFetchError)" -ForegroundColor DarkRed
+            Write-Host ""
+            Write-Host "  This is a service-side failure, not an empty queue - there may well be" -ForegroundColor Yellow
+            Write-Host "  requests awaiting your approval. Press R to retry." -ForegroundColor Yellow
+        }
+        else {
+            Write-Host "  No requests pending your approval." -ForegroundColor Yellow
+        }
         Write-Host ""
         return
     }
@@ -2611,10 +2657,18 @@ function Start-MAAApproval {
 function Start-ApprovalManager {
     param([string]$UserEmail)
 
+    $pendingRequests = @()
+    $needsFetch = $true
+
     while ($true) {
-        Show-Header -UserEmail $UserEmail
-        Write-Host "  Fetching pending requests..." -ForegroundColor Cyan
-        $pendingRequests = @(Get-PendingMAARequests -UserEmail $UserEmail)
+        # A full fetch scans every request in the tenant and cannot be made
+        # cheap, so only re-fetch on an explicit refresh - actioned requests are
+        # dropped from the list in place.
+        if ($needsFetch) {
+            Show-Header -UserEmail $UserEmail
+            $pendingRequests = @(Get-PendingMAARequests -UserEmail $UserEmail)
+            $needsFetch = $false
+        }
 
         Show-PendingRequestsList -Requests $pendingRequests -UserEmail $UserEmail
 
@@ -2641,7 +2695,7 @@ function Start-ApprovalManager {
                 Write-Host ""
                 exit 0
             }
-            "R" { continue }
+            "R" { $needsFetch = $true; continue }
             "H" { Show-HelpMenu; continue }
             "A" {
                 if ($pendingRequests.Count -eq 0) {
@@ -2667,6 +2721,8 @@ function Start-ApprovalManager {
                 if ($confirm.ToUpper() -eq "Y") {
                     Write-Host ""
                     $approved = 0
+                    $total = $pendingRequests.Count
+                    $remaining = @()
                     foreach ($req in $pendingRequests) {
                         $name = $req.payloadName
                         if ([string]::IsNullOrWhiteSpace($name)) { $name = $req.displayName }
@@ -2682,12 +2738,14 @@ function Start-ApprovalManager {
                             if ($result.Error) {
                                 Write-Host "        Error: $($result.Error)" -ForegroundColor DarkRed
                             }
+                            $remaining += $req
                         }
                         Start-Sleep -Milliseconds 300
                     }
+                    $pendingRequests = @($remaining)
                     Write-Host ""
                     Write-Host "  SUCCESS: " -ForegroundColor Green -NoNewline
-                    Write-Host "Approved $approved of $($pendingRequests.Count) requests" -ForegroundColor White
+                    Write-Host "Approved $approved of $total requests" -ForegroundColor White
                     Wait-ForKeyPress
                 }
             }
@@ -2715,6 +2773,8 @@ function Start-ApprovalManager {
                 if ($confirm.ToUpper() -eq "Y") {
                     Write-Host ""
                     $rejected = 0
+                    $total = $pendingRequests.Count
+                    $remaining = @()
                     foreach ($req in $pendingRequests) {
                         $name = $req.payloadName
                         if ([string]::IsNullOrWhiteSpace($name)) { $name = $req.displayName }
@@ -2730,12 +2790,14 @@ function Start-ApprovalManager {
                             if ($result.Error) {
                                 Write-Host "        Error: $($result.Error)" -ForegroundColor DarkRed
                             }
+                            $remaining += $req
                         }
                         Start-Sleep -Milliseconds 300
                     }
+                    $pendingRequests = @($remaining)
                     Write-Host ""
                     Write-Host "  SUCCESS: " -ForegroundColor Green -NoNewline
-                    Write-Host "Rejected $rejected of $($pendingRequests.Count) requests" -ForegroundColor White
+                    Write-Host "Rejected $rejected of $total requests" -ForegroundColor White
                     Wait-ForKeyPress
                 }
             }
@@ -2743,6 +2805,11 @@ function Start-ApprovalManager {
                 $pIdx = [int]$pSelection - 1
                 if ($pIdx -ge 0 -and $pIdx -lt $pendingRequests.Count) {
                     $selectedPending = $pendingRequests[$pIdx]
+
+                    # The list is fetched with a narrow $select, so pull the full
+                    # entity for the detail view and script viewer.
+                    $detail = Get-MAARequestDetail -RequestId $selectedPending.id
+                    if ($detail) { $selectedPending = $detail }
 
                     $inReview = $true
                     while ($inReview) {
@@ -2762,6 +2829,7 @@ function Start-ApprovalManager {
                                 $result = Approve-MAARequest -RequestId $selectedPending.id -Justification $justInput
                                 if ($result.Success) {
                                     Write-Host "SUCCESS" -ForegroundColor Green
+                                    $pendingRequests = @($pendingRequests | Where-Object { $_.id -ne $selectedPending.id })
                                 }
                                 else {
                                     Write-Host "FAILED" -ForegroundColor Red
@@ -2787,6 +2855,7 @@ function Start-ApprovalManager {
                                     $result = Cancel-MAARequest -RequestId $selectedPending.id -Justification $justInput
                                     if ($result.Success) {
                                         Write-Host "SUCCESS" -ForegroundColor Green
+                                        $pendingRequests = @($pendingRequests | Where-Object { $_.id -ne $selectedPending.id })
                                     }
                                     else {
                                         Write-Host "FAILED" -ForegroundColor Red

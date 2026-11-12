@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.10 - 2026-11-12
+
+### Fixed
+- Pending requests never loaded in tenants with a large approval history — `Get-PendingMAARequests` asked Graph for every `operationApprovalRequest` in one response, which exceeds Intune's ~15s backend limit once a tenant accumulates a few hundred records (each carries up to ~96KB of `entitySnapshot`/`patchPayload`) and returns `503 DQCancelledOnRequestTimeout`. The request now pages with `$top=50` and a narrow `$select`
+- A failed fetch displayed "No requests pending your approval" — the error was written to the host, then immediately erased by the `Clear-Host` in `Show-Header`. Failures now render with the Graph error and a retry prompt, so a service outage can't be mistaken for an empty queue
+- Payload details were missing for some requests — the collection endpoint returns `payload` and `patchPayload` as `null` for certain records; selecting a request now fetches the full entity, which returns them populated
+
+### Changed
+- Each page is retried up to 3 times with backoff; per-page latency varies enough that a page can succeed and then time out on the next attempt
+- Approving or rejecting no longer re-walks every request in the tenant. Actioned requests are removed from the list in place, and `[R]` still forces a refresh
+
+### Notes
+- A full fetch takes ~40s for ~500 requests and can't be made meaningfully faster: this endpoint ignores `$skip` and `$orderby`, applies `$filter` after paging, and supports neither `/delta` nor `$apply`
+- Growth is bounded — Intune retains each request for 30 days after its last status change, so the record count tracks change-request volume rather than elapsed time
+
 ## 1.0.9 - 2026-09-02
 
 ### Fixed

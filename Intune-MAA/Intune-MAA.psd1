@@ -32,6 +32,11 @@
             ProjectUri   = 'https://github.com/markorr321/Intune-MAA'
             ReleaseNotes = @'
 ## 1.1.0
+- Fix review screen showing kept assignments as removed (red) on script Assign requests; changes are now compared against the full approved assignment list (actionParameters)
+- Fix review screen showing every assignment as removed on non-Assign requests such as a rename
+- Fix removed assignments not shown in red for remediation-script Assign requests
+- Fix the same assignment showing as both added and removed when Graph and the request use different formats
+- Fix "Exclude Group Group:" label on exclusion group assignments
 - Fix requests never loading in tenants with a large approval history - the unpaged Graph query exceeded Intune's ~15s backend limit and returned 503
 - Service failures are now reported instead of being cleared off screen and shown as "No requests pending your approval"
 - Retry each page up to 3 times, since per-page latency varies enough to fail intermittently

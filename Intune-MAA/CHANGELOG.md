@@ -1,8 +1,14 @@
 # Changelog
 
-## 1.1.0 - 2026-11-12
+## 1.1.0 - 2026-11-15
 
 ### Fixed
+- Assignment changes were shown wrongly on the review screen:
+  - **Removed assignments not shown in red on remediation-script Assign requests.** The script's current assignments were never looked up, because its ID was read only from `payload`, which holds a .NET type name for Assign requests. The ID now comes from the request's `payloadId`, falling back to `entitySnapshot`. Full type names like `Microsoft.Management.Services.Api.DeviceHealthScript` now also map to their Graph endpoint.
+  - **Every current assignment shown in red as removed on non-Assign requests, such as a rename.** Those requests carry no assignment list. Assignments are now compared only for Assign requests; for anything else they're listed unchanged in grey.
+  - **Kept assignments shown in red as removed on script Assign requests.** For scripts, `addedAssignments` lists only the newly added assignments. The review now compares against `actionParameters`, the full list that completing the request applies, and uses `addedAssignments` only for records without it.
+  - **The same assignment shown as both added and removed.** This happened when one side used Graph's format (`#microsoft.graph.groupAssignmentTarget`, `required`) and the other the request's (`microsoft.graph.GroupAssignmentTarget`, `Required`). The comparison now ignores those differences.
+  - **Exclusion group assignments labelled "Exclude Group Group:".**
 - Pending requests never loaded in tenants with a large approval history — `Get-PendingMAARequests` asked Graph for every `operationApprovalRequest` in one response, which exceeds Intune's ~15s backend limit once a tenant accumulates a few hundred records (each carries up to ~96KB of `entitySnapshot`/`patchPayload`) and returns `503 DQCancelledOnRequestTimeout`. The request now pages with `$top=50` and a narrow `$select`
 - A failed fetch displayed "No requests pending your approval" — the error was written to the host, then immediately erased by the `Clear-Host` in `Show-Header`. Failures now render with the Graph error and a retry prompt, so a service outage can't be mistaken for an empty queue
 - Payload details were missing for some requests — the collection endpoint returns `payload` and `patchPayload` as `null` for certain records; selecting a request now fetches the full entity, which returns them populated

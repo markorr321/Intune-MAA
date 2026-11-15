@@ -908,12 +908,7 @@ function Open-PayloadForReview {
         $safeName = $safeName -replace '[^\w\-\.]', '_'
 
         $payloadSummary = Get-PayloadSummary -Request $Request -MaxSettings 999
-        $assignments = $Request.addedAssignments
-        $existingAssignments = $Request.existingAssignments
-        if (-not $existingAssignments) {
-            $existingAssignments = Get-CurrentResourceAssignments -Request $Request
-        }
-        $assignmentsSummary = Get-AssignmentsSummary -Assignments $assignments -ExistingAssignments $existingAssignments
+        $assignmentsSummary = Get-RequestAssignmentsSummary -Request $Request
 
         $lines = @()
         $divider = [string]::new([char]0x2500, 50)
@@ -1568,15 +1563,20 @@ function Get-PayloadSummary {
 
 function Get-PayloadResourceId {
     param([object]$Request)
-    try {
-        $payloadRaw = $Request.payload
-        if (-not $payloadRaw) { return $null }
-        $parsed = if ($payloadRaw -is [string]) { $payloadRaw | ConvertFrom-Json } else { $payloadRaw }
-        if ($parsed -is [array]) { $parsed = $parsed[0] }
-        $rid = if ($parsed -is [hashtable]) { $parsed["id"] } else { $parsed.id }
-        if (-not [string]::IsNullOrWhiteSpace($rid)) { return $rid }
+    # The full request record carries the resource id directly
+    if (-not [string]::IsNullOrWhiteSpace($Request.payloadId)) { return $Request.payloadId }
+    # Otherwise dig it out of the resource JSON. Assign operations return a .NET type name in
+    # payload rather than JSON, so fall back to entitySnapshot (same as Get-PayloadSummary).
+    foreach ($payloadRaw in @($Request.payload, $Request.entitySnapshot)) {
+        if (-not $payloadRaw) { continue }
+        try {
+            $parsed = if ($payloadRaw -is [string]) { $payloadRaw | ConvertFrom-Json } else { $payloadRaw }
+            if ($parsed -is [array]) { $parsed = $parsed[0] }
+            $rid = if ($parsed -is [hashtable]) { $parsed["id"] } else { $parsed.id }
+            if (-not [string]::IsNullOrWhiteSpace($rid)) { return $rid }
+        }
+        catch { }
     }
-    catch { }
     return $null
 }
 
@@ -1588,6 +1588,10 @@ function Get-CurrentResourceAssignments {
 
     if ([string]::IsNullOrWhiteSpace($resourceId) -or [string]::IsNullOrWhiteSpace($payloadType)) {
         return $null
+    }
+
+    if ($payloadType -like "*.*") {
+        $payloadType = $payloadType.Split('.')[-1]
     }
 
     # Map payload types to their assignment endpoints
@@ -1626,6 +1630,32 @@ function Get-CurrentResourceAssignments {
     return $null
 }
 
+function Get-AssignmentKey {
+    param([object]$Assignment)
+
+    # Compare on the bare type name: Graph returns "#microsoft.graph.groupAssignmentTarget" while
+    # MAA records hold "microsoft.graph.GroupAssignmentTarget" for the same target. Hashtable keys
+    # are case-insensitive, which also absorbs "Required" vs "required" in the intent.
+    $target = $Assignment.target
+    if (-not $target) { return $null }
+    $type = ([string]$target.'@odata.type' -split '\.')[-1].TrimStart('#')
+    return "$type|$($target.groupId)|$($Assignment.intent)"
+}
+
+function Get-AssignmentTargetLabel {
+    param([string]$TargetType)
+
+    # Return on the first match: an exclusion target's type also ends in "groupAssignmentTarget",
+    # so letting the switch fall through produced "Exclude Group Group:"
+    switch -Wildcard ($TargetType) {
+        "*allLicensedUsersAssignmentTarget" { return "All Users" }
+        "*allDevicesAssignmentTarget" { return "All Devices" }
+        "*exclusionGroupAssignmentTarget" { return "Exclude Group" }
+        "*groupAssignmentTarget" { return "Group" }
+    }
+    return "Target"
+}
+
 function Get-AssignmentsSummary {
     param(
         [object]$Assignments,
@@ -1652,14 +1682,8 @@ function Get-AssignmentsSummary {
         try {
             $existingParsed = if ($ExistingAssignments -is [string]) { $ExistingAssignments | ConvertFrom-Json } else { $ExistingAssignments }
             foreach ($existing in $existingParsed) {
-                $eTarget = $existing.target
-                if ($eTarget) {
-                    $eGroupId = $eTarget.groupId
-                    $eType = $eTarget.'@odata.type'
-                    $eIntent = $existing.intent
-                    $key = "$eType|$eGroupId|$eIntent"
-                    $existingKeys[$key] = $true
-                }
+                $key = Get-AssignmentKey -Assignment $existing
+                if ($key) { $existingKeys[$key] = $true }
             }
         }
         catch { }
@@ -1671,27 +1695,15 @@ function Get-AssignmentsSummary {
     # Build keys for the new (full) assignment list
     $newKeys = @{}
     foreach ($assignment in $parsed) {
-        $target = $assignment.target
-        if (-not $target) { continue }
-        $targetType = $target.'@odata.type'
-        $groupId = $target.groupId
-        $intent = $assignment.intent
-        $key = "$targetType|$groupId|$intent"
-        $newKeys[$key] = $true
+        $key = Get-AssignmentKey -Assignment $assignment
+        if ($key) { $newKeys[$key] = $true }
     }
 
     foreach ($assignment in $parsed) {
         $target = $assignment.target
         if (-not $target) { continue }
 
-        $targetType = $target.'@odata.type'
-        $targetDisplay = switch -Wildcard ($targetType) {
-            "*allLicensedUsersAssignmentTarget" { "All Users" }
-            "*allDevicesAssignmentTarget" { "All Devices" }
-            "*exclusionGroupAssignmentTarget" { "Exclude Group" }
-            "*groupAssignmentTarget" { "Group" }
-            default { "Target" }
-        }
+        $targetDisplay = Get-AssignmentTargetLabel -TargetType $target.'@odata.type'
 
         $groupId = $target.groupId
         if ($groupId) {
@@ -1715,8 +1727,7 @@ function Get-AssignmentsSummary {
         }
 
         # Determine if this assignment is new
-        $key = "$targetType|$groupId|$intent"
-        $isNew = -not $existingKeys.ContainsKey($key)
+        $isNew = -not $existingKeys.ContainsKey((Get-AssignmentKey -Assignment $assignment))
 
         $assignmentItems += [PSCustomObject]@{ Label = ""; Value = "    $targetDisplay"; IsNew = $isNew; IsRemoved = $false }
     }
@@ -1729,19 +1740,11 @@ function Get-AssignmentsSummary {
                 $eTarget = $existing.target
                 if (-not $eTarget) { continue }
 
-                $eType = $eTarget.'@odata.type'
                 $eGroupId = $eTarget.groupId
                 $eIntent = $existing.intent
-                $key = "$eType|$eGroupId|$eIntent"
 
-                if (-not $newKeys.ContainsKey($key)) {
-                    $targetDisplay = switch -Wildcard ($eType) {
-                        "*allLicensedUsersAssignmentTarget" { "All Users" }
-                        "*allDevicesAssignmentTarget" { "All Devices" }
-                        "*exclusionGroupAssignmentTarget" { "Exclude Group" }
-                        "*groupAssignmentTarget" { "Group" }
-                        default { "Target" }
-                    }
+                if (-not $newKeys.ContainsKey((Get-AssignmentKey -Assignment $existing))) {
+                    $targetDisplay = Get-AssignmentTargetLabel -TargetType $eTarget.'@odata.type'
 
                     if ($eGroupId) {
                         $groupInfo = Resolve-GroupInfo -GroupId $eGroupId
@@ -1776,6 +1779,44 @@ function Get-AssignmentsSummary {
     $summary += $assignmentItems
 
     return $summary
+}
+
+function Get-RequestAssignmentsSummary {
+    param([object]$Request)
+
+    $existingAssignments = $Request.existingAssignments
+    if (-not $existingAssignments) {
+        $existingAssignments = Get-CurrentResourceAssignments -Request $Request
+    }
+
+    # Only Assign operations change assignments. Anything else (e.g. a rename) carries no
+    # assignment list, which would otherwise read as every current assignment being removed,
+    # so show the current assignments as unchanged instead.
+    $assignments = if ($Request.payloadOperation -eq 'Assign') { Get-ApprovedAssignmentList -Request $Request } else { $existingAssignments }
+
+    return Get-AssignmentsSummary -Assignments $assignments -ExistingAssignments $existingAssignments
+}
+
+function Get-ApprovedAssignmentList {
+    param([object]$Request)
+
+    # actionParameters is the assign body exactly as approved: the complete list the resource
+    # ends up with, since assigning replaces every assignment. addedAssignments is Intune's own
+    # summary and can leave out assignments that are being kept (seen on a platform script: only
+    # the new exclude group, so the kept All Users showed as removed). It's only a fallback.
+    $raw = $Request.actionParameters
+    if ($raw) {
+        try {
+            $json = if ($raw -is [string]) { $raw } else { $raw | ConvertTo-Json -Depth 20 }
+            $parsed = $json | ConvertFrom-Json
+            foreach ($property in $parsed.PSObject.Properties) {
+                # The one array in the body (mobileAppAssignments, deviceHealthScriptAssignments, ...)
+                if ($property.Value -is [array]) { return , @($property.Value) }
+            }
+        }
+        catch { }
+    }
+    return $Request.addedAssignments
 }
 
 function Show-PayloadDetails {
@@ -2369,12 +2410,7 @@ function Show-PendingActions {
 
     $payloadSummary = Get-PayloadSummary -Request $Request
 
-    $assignments = $Request.addedAssignments
-    $existingAssignments = $Request.existingAssignments
-    if (-not $existingAssignments) {
-        $existingAssignments = Get-CurrentResourceAssignments -Request $Request
-    }
-    $assignmentsSummary = Get-AssignmentsSummary -Assignments $assignments -ExistingAssignments $existingAssignments
+    $assignmentsSummary = Get-RequestAssignmentsSummary -Request $Request
     $scopeTagSummary = Get-ScopeTagChangeSummary -Request $Request
     Show-PayloadDetails -Summary $payloadSummary -AssignmentsSummary $assignmentsSummary -ScopeTagSummary $scopeTagSummary
 
